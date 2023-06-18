@@ -6,6 +6,8 @@ import argparse
 import time
 from pathlib import Path
 
+import csv
+import math
 import cv2
 import torch
 import torch.backends.cudnn as cudnn
@@ -26,7 +28,16 @@ deepsort = None
 object_counter = {}
 object_counter1 = {}
 line = [(100, 500), (1050, 500)]
+speed_line_queue = {}
 
+# csv
+number_row = 0
+file_name = 0
+max_row = 25000000 - 1
+start_time = int(time.time() * 1000)
+calc_timestamps = 0.0
+
+# optical solution
 feature_params = dict(maxCorners=300, qualityLevel=0.2,
                       minDistance=2, blockSize=7)
 lk_params = dict(winSize=(15, 15), maxLevel=2, criteria=(
@@ -172,7 +183,9 @@ def get_direction(point1, point2):
     return direction_str
 
 
-def draw_boxes(img, bbox, names, object_id, identities=None, offset=(0, 0)):
+def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0, 0)):
+    global number_row, max_row, file_name, calc_timestamps
+
     cv2.line(img, line[0], line[1], (46, 162, 112), 3)
 
     height, width, _ = img.shape
@@ -197,14 +210,17 @@ def draw_boxes(img, bbox, names, object_id, identities=None, offset=(0, 0)):
         # create new buffer for new object
         if id not in data_deque:
             data_deque[id] = deque(maxlen=64)
+            speed_line_queue[id] = []
         color = compute_color_for_labels(object_id[i])
         obj_name = names[object_id[i]]
-        label = "ID:" + '{}{:d}'.format("", id) + ", " + '%s' % (obj_name)
+        label = '{}{:d}'.format("", id) + ":" + '%s' % (obj_name)
 
         # add center to buffer
         data_deque[id].appendleft(center)
         if len(data_deque[id]) >= 2:
             direction = get_direction(data_deque[id][0], data_deque[id][1])
+            object_speed = estimatespeed(data_deque[id][1], data_deque[id][0])
+            speed_line_queue[id].append(object_speed)
             if intersect(data_deque[id][0], data_deque[id][1], line[0], line[1]):
                 cv2.line(img, line[0], line[1], (255, 255, 255), 3)
                 if "South" in direction:
@@ -217,7 +233,38 @@ def draw_boxes(img, bbox, names, object_id, identities=None, offset=(0, 0)):
                         object_counter1[obj_name] = 1
                     else:
                         object_counter1[obj_name] += 1
+
+        # gen header csv
+        if (number_row % max_row == 0):
+            gen_csv_header()
+        number_row += 1
+        cap_timestamp = vid_cap.get(cv2.CAP_PROP_POS_MSEC)
+        fps = vid_cap.get(cv2.CAP_PROP_FPS)
+        calc_timestamp = calc_timestamps + 1000 / fps
+        cur_timestamp = int(start_time + abs(cap_timestamp - calc_timestamp))
+
+        try:
+            label = label + " " + \
+                str(sum(speed_line_queue[id]) //
+                    len(speed_line_queue[id])) + "km/h"
+
+            # gen body csv
+            data_csv = [number_row, id, obj_name, str(sum(speed_line_queue[id]) //
+                                                      len(speed_line_queue[id])) + "km/h", center[0], center[1], cur_timestamp]
+            with open('../../../csv/' + str(file_name) + '.csv', mode='a', encoding='UTF8') as f:
+                writer = csv.writer(f)
+                writer.writerow(data_csv)
+        except:
+            # gen body csv
+            data_csv = [number_row, id, obj_name, None,
+                        center[0], center[1], cur_timestamp]
+            with open('../../../csv/' + str(file_name) + '.csv', mode='a', encoding='UTF8') as f:
+                writer = csv.writer(f)
+                writer.writerow(data_csv)
+            pass
+
         UI_box(box, img, label=label, color=color, line_thickness=2)
+
         # draw trail
         for i in range(1, len(data_deque[id])):
             # check if on buffer value is none
@@ -251,7 +298,63 @@ def draw_boxes(img, bbox, names, object_id, identities=None, offset=(0, 0)):
                         [225, 255, 255], thickness=2, lineType=cv2.LINE_AA)
 
     return img
-##########################################################################################
+
+
+def gen_csv_header():
+    global number_row, max_row, file_name
+
+    file_name += 1
+    header = ['number', 'id', 'name', 'speed', 'positionX', 'positionY', 'timestamp', 'lane',
+              'left_id', 'front_id', 'right_id', 'back_id',
+              'left_distance', 'front_distance', 'right_distance', 'back_distance']
+    with open('../../../csv/' + str(file_name) + '.csv', 'w', encoding='UTF8', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(header)
+
+
+def estimatespeed(Location1, Location2):
+    # Euclidean Distance Formula
+    d_pixel = math.sqrt(math.pow(
+        Location2[0] - Location1[0], 2) + math.pow(Location2[1] - Location1[1], 2))
+    # defining thr pixels per meter
+    ppm = 8
+    d_meters = d_pixel/ppm
+    time_constant = 15*3.6
+    # distance = speed/time
+    speed = d_meters * time_constant
+
+    return int(speed)
+
+
+def sparse_solution(img):
+    global first_frame, prev_gray, prev, mask
+
+    img2 = img.copy()
+
+    if (first_frame is None):
+        first_frame = img2
+        prev_gray = cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY)
+        prev = cv2.goodFeaturesToTrack(
+            prev_gray, mask=None, **feature_params)
+        mask = np.zeros_like(first_frame)
+
+    gray = cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY)
+    prev = cv2.goodFeaturesToTrack(prev_gray, mask=None, **feature_params)
+    next, status, error = cv2.calcOpticalFlowPyrLK(
+        prev_gray, gray, prev, None, **lk_params)
+    good_old = prev[status == 1].astype(int)
+    good_new = next[status == 1].astype(int)
+
+    for i, (new, old) in enumerate(zip(good_new, good_old)):
+        a, b = new.ravel()
+        c, d = old.ravel()
+        mask = cv2.line(mask, (a, b), (c, d), (0, 255, 0), 2)
+        img2 = cv2.circle(img2, (a, b), 3, (0, 255, 0), -1)
+    output = cv2.add(img2, mask)
+    prev_gray = gray.copy()
+    prev = good_new.reshape(-1, 1, 2)
+
+    return output
 
 
 class DetectionPredictor(BasePredictor):
@@ -278,8 +381,9 @@ class DetectionPredictor(BasePredictor):
 
         return preds
 
-    def write_results(self, idx, preds, batch):
+    def write_results(self, idx, preds, batch, vid_cap):
         p, im, im0 = batch
+        all_outputs = []
         log_string = ""
         if len(im.shape) == 3:
             im = im[None]  # expand for batch dim
@@ -299,7 +403,7 @@ class DetectionPredictor(BasePredictor):
         self.annotator = self.get_annotator(im0)
 
         det = preds[idx]
-        self.all_outputs.append(det)
+        all_outputs.append(det)
         if len(det) == 0:
             return log_string
         for c in det[:, 5].unique():
@@ -326,7 +430,8 @@ class DetectionPredictor(BasePredictor):
             identities = outputs[:, -2]
             object_id = outputs[:, -1]
 
-            draw_boxes(im0, bbox_xyxy, self.model.names, object_id, identities)
+            draw_boxes(im0, bbox_xyxy, self.model.names,
+                       object_id, vid_cap, identities)
 
         return log_string
 
