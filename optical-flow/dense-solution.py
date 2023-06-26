@@ -2,7 +2,7 @@ import cv2 as cv
 import numpy as np
 
 # The video feed is read in as a VideoCapture object
-cap = cv.VideoCapture("https://camera1.iticfoundation.org/hls/10.8.0.14_8002.m3u8")
+cap = cv.VideoCapture("test2.mp4")
 # ret = a boolean return value from getting the frame, first_frame = the first frame in the entire video sequence
 ret, first_frame = cap.read()
 # Converts frame to grayscale because we only need the luminance channel for detecting edges - less computationally expensive
@@ -26,6 +26,7 @@ while(cap.isOpened()):
     magnitude, angle = cv.cartToPolar(flow[..., 0], flow[..., 1])
     # Sets image hue according to the optical flow direction
     mask[..., 0] = angle * 180 / np.pi / 2
+    print(angle)
     # Sets image value according to the optical flow magnitude (normalized)
     mask[..., 2] = cv.normalize(magnitude, None, 0, 255, cv.NORM_MINMAX)
     # Converts HSV to RGB (BGR) color representation

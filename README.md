@@ -33,7 +33,10 @@ cd yolo/v8/detect
 - Do Tracking with mentioned command below
 ```
 # video file
-python tracking_vehicle_counting_speed.py model=yolov8l.pt source="test.mp4" show=True
+python tracking_vehicle_counting_speed.py model=yolov8n.pt source="test.mp4" show=True
 
-python tracking_vehicle_counting_speed.py model=yolov8l.pt source="https://camera1.iticfoundation.org/hls/10.8.0.14_8002.m3u8" show=True
+python tracking_vehicle_counting_speed.py model=yolov8n.pt source="https://camera1.iticfoundation.org/hls/10.8.0.14_8002.m3u8" show=True
+
+python server.py model=yolov8n.pt source="test.mp4" show=True
+python detect.py model=yolov8n.pt source="test.mp4" show=True
 ```
