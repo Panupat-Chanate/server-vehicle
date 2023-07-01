@@ -312,9 +312,6 @@ def estimatespeed(Location1, Location2):
     return int(speed)
 
 
-def res_image(image):
-    emit("my image", image)
-
 ##########################################################################################
 
 
@@ -412,7 +409,7 @@ class DetectionPredictor(BasePredictor):
 
         # Send the processed image back to the client
         cv2.waitKey(1)
-        res_image(processed_img_data)
+        emit("my image", {'data': processed_img_data, 'path': p})
 
 
 # @hydra.main(version_base=None, config_path=str(DEFAULT_CONFIG.parent), config_name=DEFAULT_CONFIG.name)
