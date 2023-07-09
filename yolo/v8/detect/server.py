@@ -35,13 +35,32 @@ def receive_image(message):
     predict(message['data'])
 
 
+@socketio.on("first image")
+def receive_image(message):
+    cap = cv2.VideoCapture(message['data'])
+    _, frame = cap.read()
+    frame_resized = cv2.resize(frame, (640, 360))
+
+    # Encode the processed image as a JPEG-encoded base64 string
+    encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 90]
+    result, frame_encoded = cv2.imencode(
+        ".jpg", frame_resized, encode_param)
+    processed_img_data = base64.b64encode(frame_encoded).decode()
+
+    # Prepend the base64-encoded string with the data URL prefix
+    b64_src = "data:image/jpg;base64,"
+    processed_img_data = b64_src + processed_img_data
+
+    emit('first image', {'data': processed_img_data})
+
+
 @socketio.on('connect')
 def test_connect():
-    emit('my connect', {'data': 'Connected'})
+    emit('my connect', {'data': 'Connected'}, broadcast=True)
 
 
-@socketio.on('disconnect')
-def test_disconnect():
+@socketio.on('client_disconnecting')
+def disconnect_details():
     emit('my connect', {'data': 'Disconnected'})
 
 

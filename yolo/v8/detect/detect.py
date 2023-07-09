@@ -23,6 +23,7 @@ from deep_sort_pytorch.deep_sort import DeepSort
 from collections import deque
 
 from flask_socketio import emit
+from PIL import Image, ImageDraw, ImageTk
 
 
 palette = (2 ** 11 - 1, 2 ** 15 - 1, 2 ** 20 - 1)
@@ -32,6 +33,9 @@ object_counter = {}
 object_counter1 = {}
 line = [(100, 500), (1050, 500)]
 speed_line_queue = {}
+cfg_ppm = 8
+cfg_border = True
+data_deque_unlimit = {}
 
 # csv
 number_row = 0
@@ -121,7 +125,9 @@ def UI_box(x, img, color=None, label=None, line_thickness=None):
         0.002 * (img.shape[0] + img.shape[1]) / 2) + 1  # line/font thickness
     color = color or [random.randint(0, 255) for _ in range(3)]
     c1, c2 = (int(x[0]), int(x[1])), (int(x[2]), int(x[3]))
-    cv2.rectangle(img, c1, c2, color, thickness=tl, lineType=cv2.LINE_AA)
+
+    if (cfg_border):
+        cv2.rectangle(img, c1, c2, color, thickness=tl, lineType=cv2.LINE_AA)
     if label:
         tf = max(tl - 1, 1)  # font thickness
         t_size = cv2.getTextSize(label, 0, fontScale=tl / 3, thickness=tf)[0]
@@ -164,11 +170,24 @@ def get_direction(point1, point2):
 
 
 def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0, 0)):
-    global number_row, max_row, file_name, calc_timestamps
+    global number_row, max_row, file_name, calc_timestamps, data_deque_unlimit
+
+    img2 = img.copy()
+    height, width, _ = img.shape
+    imgNew = Image.new("RGB", (width, height), (0, 0, 0))
+    draw = ImageDraw.Draw(imgNew)
+
+    # for x in range(0, width, int(width / 25)):
+    #     draw.line(((x, 0), (x, height)), fill=128)
+    # for y in range(0, height, int(width / 100)):
+    #     draw.line(((0, y), (width, y)), fill=128)
+
+    # im_bw = cv2.threshold(img, 255, 255, cv2.THRESH_BINARY)[1]
+    # imgNew = Image.fromarray(im_bw)
+    vhc_list = []
 
     # cv2.line(img, line[0], line[1], (46, 162, 112), 3)
 
-    height, width, _ = img.shape
     # remove tracked point from buffer if object is lost
     for key in list(data_deque):
         if key not in identities:
@@ -190,6 +209,7 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
         # create new buffer for new object
         if id not in data_deque:
             data_deque[id] = deque(maxlen=64)
+            data_deque_unlimit[id] = deque()
             speed_line_queue[id] = []
         color = compute_color_for_labels(object_id[i])
         obj_name = names[object_id[i]]
@@ -197,6 +217,8 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
 
         # add center to buffer
         data_deque[id].appendleft(center)
+        data_deque_unlimit[id].appendleft(center)
+        # data_deque_unlimit[id][:0] = [center]
         if len(data_deque[id]) >= 2:
             direction = get_direction(data_deque[id][0], data_deque[id][1])
             object_speed = estimatespeed(data_deque[id][1], data_deque[id][0])
@@ -240,6 +262,9 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
             with open('../../../csv/' + str(file_name) + '.csv', mode='a', encoding='UTF8') as f:
                 writer = csv.writer(f)
                 writer.writerow(data_csv)
+
+            vhc_list.append({'id': id, 'type': obj_name, 'speed': str(sum(speed_line_queue[id]) //
+                                                                      len(speed_line_queue[id])) + "km/h"})
         except:
             # gen body csv
             data_csv = [number_row, id, obj_name, None,
@@ -262,6 +287,23 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
             cv2.line(img, data_deque[id][i - 1],
                      data_deque[id][i], color, thickness)
 
+        # cv2.circle(img, data_deque[id][0], 5, color, -1)
+        draw.ellipse([int((x2+x1) / 2 - 10),
+                      int((y2+y2)/2 - 10),
+                      int((x2+x1) / 2 + 10),
+                      int((y2+y2)/2 + 10)],
+                     fill=color, outline=None)
+
+    # draw trail unlimit
+    for id in data_deque_unlimit:
+        for i in range(1, len(data_deque_unlimit[id])):
+            # check if on buffer value is none
+            if data_deque_unlimit[id][i - 1] is None or data_deque_unlimit[id][i] is None:
+                continue
+            # draw trails
+            cv2.line(img2, data_deque_unlimit[id][i - 1],
+                     data_deque_unlimit[id][i], (85, 45, 255), 2)
+
     # 4. Display Count in top right corner
         # for idx, (key, value) in enumerate(object_counter1.items()):
         #     cnt_str = str(key) + ":" + str(value)
@@ -283,7 +325,8 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
         #     cv2.putText(img, cnt_str1, (11, 75 + (idx*40)), 0, 1,
         #                 [225, 255, 255], thickness=2, lineType=cv2.LINE_AA)
 
-    return img
+    # return img
+    return {'list': vhc_list, 'draw': imgNew, 'totalImg': img2}
 
 
 def gen_csv_header():
@@ -303,7 +346,7 @@ def estimatespeed(Location1, Location2):
     d_pixel = math.sqrt(math.pow(
         Location2[0] - Location1[0], 2) + math.pow(Location2[1] - Location1[1], 2))
     # defining thr pixels per meter
-    ppm = 8
+    ppm = int(cfg_ppm)
     d_meters = d_pixel/ppm
     time_constant = 15*3.6
     # distance = speed/time
@@ -348,7 +391,7 @@ class DetectionPredictor(BasePredictor):
         self.seen += 1
         im0 = im0.copy()
         if self.webcam:  # batch_size >= 1
-            log_string += f'{idx}: '
+            # log_string += f'{idx}: '
             frame = self.dataset.count
         else:
             frame = getattr(self.dataset, 'frame', 0)
@@ -357,7 +400,7 @@ class DetectionPredictor(BasePredictor):
         save_path = str(self.save_dir / p.name)  # im.jpg
         self.txt_path = str(self.save_dir / 'labels' / p.stem) + \
             ('' if self.dataset.mode == 'image' else f'_{frame}')
-        log_string += '%gx%g ' % im.shape[2:]  # print string
+        # log_string += '%gx%g ' % im.shape[2:]  # print string
         self.annotator = self.get_annotator(im0)
 
         det = preds[idx]
@@ -366,7 +409,7 @@ class DetectionPredictor(BasePredictor):
             return log_string
         for c in det[:, 5].unique():
             n = (det[:, 5] == c).sum()  # detections per class
-            log_string += f"{n} {self.model.names[int(c)]}{'s' * (n > 1)}, "
+            log_string += f"{n} {self.model.names[int(c)]},"
         # write
         gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
         xywh_bboxs = []
@@ -388,32 +431,55 @@ class DetectionPredictor(BasePredictor):
             identities = outputs[:, -2]
             object_id = outputs[:, -1]
 
-            draw_boxes(im0, bbox_xyxy, self.model.names,
-                       object_id, vid_cap, identities)
+            val = draw_boxes(im0, bbox_xyxy, self.model.names,
+                             object_id, vid_cap, identities)
+            imgNew = np.asarray(val['draw'])
+            return {'log': log_string, 'list': val['list'], 'draw': imgNew, 'totalImg': val['totalImg']}
 
-        return log_string
+        # print(log_string)
+        imgNew = Image.new("RGB", (640, 360), (0, 0, 0))
+        imgNew = np.asarray(imgNew)
+        return {'log': log_string, 'list': [], 'draw': imgNew, 'totalImg': imgNew}
 
-    def emit_image(self, p):
+    def emit_image(self, p, s1, s2, draw, total):
+        # draw = np.asarray(draw)
+
         im0 = self.annotator.result()
         frame_resized = cv2.resize(im0, (640, 360))
+        frame_resized_total = cv2.resize(total, (640, 360))
 
         # Encode the processed image as a JPEG-encoded base64 string
         encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 90]
-        result, frame_encoded = cv2.imencode(
+        _, frame_encoded = cv2.imencode(
             ".jpg", frame_resized, encode_param)
         processed_img_data = base64.b64encode(frame_encoded).decode()
+
+        _, frame_encoded_draw = cv2.imencode(
+            ".jpg", draw, encode_param)
+        processed_img_data_draw = base64.b64encode(frame_encoded_draw).decode()
+
+        _, frame_encoded_total = cv2.imencode(
+            ".jpg", frame_resized_total, encode_param)
+        processed_img_data_total = base64.b64encode(
+            frame_encoded_total).decode()
 
         # Prepend the base64-encoded string with the data URL prefix
         b64_src = "data:image/jpg;base64,"
         processed_img_data = b64_src + processed_img_data
+        processed_img_data_draw = b64_src + processed_img_data_draw
+        processed_img_data_total = b64_src + processed_img_data_total
 
         # Send the processed image back to the client
         cv2.waitKey(1)
-        emit("my image", {'data': processed_img_data, 'path': p})
+        emit("my image", {'data': processed_img_data,
+             'list': s2, 'log': s1, 'draw': processed_img_data_draw, 'totalImg': processed_img_data_total})
 
 
 # @hydra.main(version_base=None, config_path=str(DEFAULT_CONFIG.parent), config_name=DEFAULT_CONFIG.name)
 def predict(cfg):
+    global cfg_ppm, cfg_border
+    cfg_ppm = cfg['ppm']
+    cfg_border = cfg['border']
     init_tracker()
     # cfg.model = cfg.model or "yolov8n.pt"
     # cfg.imgsz = check_imgsz(cfg.imgsz, min_dim=2)  # check image size
