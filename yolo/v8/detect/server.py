@@ -1,10 +1,7 @@
 import cv2
 import numpy as np
 import base64
-<<<<<<< HEAD
 import os
-=======
->>>>>>> fdabdee22678acdfa556e8dd3b2156305d667b47
 
 from flask import Flask, render_template
 from flask_socketio import SocketIO, emit
@@ -68,14 +65,11 @@ def disconnect_details():
     emit('my connect', {'data': 'Disconnected'})
 
 
-<<<<<<< HEAD
 @socketio.on('stop')
 def test_connent():
     os.system("cmd")
 
 
-=======
->>>>>>> fdabdee22678acdfa556e8dd3b2156305d667b47
 # function
 def base64_to_image(base64_string):
     base64_data = base64_string.split(",")[1]
