@@ -31,22 +31,15 @@ data_deque = {}
 deepsort = None
 object_counter = {}
 object_counter1 = {}
-<<<<<<< HEAD
 # line = [(100, 500), (1050, 500)]
 line = [(402, 470), (606, 559)]
-=======
-line = [(100, 500), (1050, 500)]
->>>>>>> fdabdee22678acdfa556e8dd3b2156305d667b47
 speed_line_queue = {}
 cfg_ppm = 8
 cfg_border = True
 data_deque_unlimit = {}
-<<<<<<< HEAD
 data_deque_gate = {}
 cfg_rslt = (640, 360)
 cfg_center = "bottom"
-=======
->>>>>>> fdabdee22678acdfa556e8dd3b2156305d667b47
 
 # csv
 number_row = 0
@@ -181,11 +174,7 @@ def get_direction(point1, point2):
 
 
 def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0, 0)):
-<<<<<<< HEAD
     global number_row, max_row, file_name, calc_timestamps, data_deque_unlimit, data_deque_gate, cfg_center
-=======
-    global number_row, max_row, file_name, calc_timestamps, data_deque_unlimit
->>>>>>> fdabdee22678acdfa556e8dd3b2156305d667b47
 
     img2 = img.copy()
     height, width, _ = img.shape
@@ -197,19 +186,11 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
     # for y in range(0, height, int(width / 100)):
     #     draw.line(((0, y), (width, y)), fill=128)
 
-<<<<<<< HEAD
     vhc_list = []
 
     # draw gate
     # for i in line:
     #     cv2.line(img, (i[0], i[1]), (i[2], i[3]), (255, 0, 0), 1)
-=======
-    # im_bw = cv2.threshold(img, 255, 255, cv2.THRESH_BINARY)[1]
-    # imgNew = Image.fromarray(im_bw)
-    vhc_list = []
-
-    # cv2.line(img, line[0], line[1], (46, 162, 112), 3)
->>>>>>> fdabdee22678acdfa556e8dd3b2156305d667b47
 
     # remove tracked point from buffer if object is lost
     for key in list(data_deque):
@@ -224,7 +205,6 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
         y2 += offset[1]
 
         # code to find center of bottom edge
-<<<<<<< HEAD
         if (cfg_center == 'center'):
             center = (int((x1+x2)/2), int((y1+y2)/2))
         elif (cfg_center == 'top'):
@@ -235,9 +215,6 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
             center = (int((x2)), int((y2+y1)/2))
         else:
             center = (int((x2+x1)/2), int(y2))
-=======
-        center = (int((x2+x1) / 2), int((y2+y2)/2))
->>>>>>> fdabdee22678acdfa556e8dd3b2156305d667b47
 
         # get ID of object
         id = int(identities[i]) if identities is not None else 0
@@ -247,10 +224,7 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
             data_deque[id] = deque(maxlen=64)
             data_deque_unlimit[id] = deque()
             speed_line_queue[id] = []
-<<<<<<< HEAD
             data_deque_gate[id] = []
-=======
->>>>>>> fdabdee22678acdfa556e8dd3b2156305d667b47
         color = compute_color_for_labels(object_id[i])
         obj_name = names[object_id[i]]
         label = "ID:" + '{}{:d}'.format("", id) + ":" + '%s' % (obj_name)
@@ -258,15 +232,10 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
         # add center to buffer
         data_deque[id].appendleft(center)
         data_deque_unlimit[id].appendleft(center)
-<<<<<<< HEAD
-=======
-        # data_deque_unlimit[id][:0] = [center]
->>>>>>> fdabdee22678acdfa556e8dd3b2156305d667b47
         if len(data_deque[id]) >= 2:
             direction = get_direction(data_deque[id][0], data_deque[id][1])
             object_speed = estimatespeed(data_deque[id][1], data_deque[id][0])
             speed_line_queue[id].append(object_speed)
-<<<<<<< HEAD
 
             for i, gate in enumerate(line):
                 if intersect(data_deque[id][0], data_deque[id][1], (gate[0], gate[1]), (gate[2], gate[3])):
@@ -285,20 +254,6 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
                     #         object_counter1[obj_name] = 1
                     #     else:
                     #         object_counter1[obj_name] += 1
-=======
-            if intersect(data_deque[id][0], data_deque[id][1], line[0], line[1]):
-                # cv2.line(img, line[0], line[1], (255, 255, 255), 3)
-                if "South" in direction:
-                    if obj_name not in object_counter:
-                        object_counter[obj_name] = 1
-                    else:
-                        object_counter[obj_name] += 1
-                if "North" in direction:
-                    if obj_name not in object_counter1:
-                        object_counter1[obj_name] = 1
-                    else:
-                        object_counter1[obj_name] += 1
->>>>>>> fdabdee22678acdfa556e8dd3b2156305d667b47
 
         # gen header csv
         if (number_row % max_row == 0):
@@ -315,7 +270,6 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
         except:
             pass
 
-<<<<<<< HEAD
         in_gate = None
         out_gate = None
 
@@ -325,8 +279,6 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
             in_gate = data_deque_gate[id][0]
             out_gate = data_deque_gate[id][1]
 
-=======
->>>>>>> fdabdee22678acdfa556e8dd3b2156305d667b47
         try:
             label = label + " speed:" + \
                 str(sum(speed_line_queue[id]) //
@@ -334,29 +286,17 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
 
             # gen body csv
             data_csv = [number_row, id, obj_name, str(sum(speed_line_queue[id]) //
-<<<<<<< HEAD
                                                       len(speed_line_queue[id])) + "km/h", center[0], center[1], cur_timestamp, in_gate, out_gate]
-=======
-                                                      len(speed_line_queue[id])) + "km/h", center[0], center[1], cur_timestamp]
->>>>>>> fdabdee22678acdfa556e8dd3b2156305d667b47
             with open('../../../csv/' + str(file_name) + '.csv', mode='a', encoding='UTF8') as f:
                 writer = csv.writer(f)
                 writer.writerow(data_csv)
 
             vhc_list.append({'id': id, 'type': obj_name, 'speed': str(sum(speed_line_queue[id]) //
-<<<<<<< HEAD
                                                                       len(speed_line_queue[id])) + "km/h", 'gate': data_deque_gate[id]})
         except:
             # gen body csv
             data_csv = [number_row, id, obj_name, None,
                         center[0], center[1], cur_timestamp, None, None]
-=======
-                                                                      len(speed_line_queue[id])) + "km/h"})
-        except:
-            # gen body csv
-            data_csv = [number_row, id, obj_name, None,
-                        center[0], center[1], cur_timestamp]
->>>>>>> fdabdee22678acdfa556e8dd3b2156305d667b47
             with open('../../../csv/' + str(file_name) + '.csv', mode='a', encoding='UTF8') as f:
                 writer = csv.writer(f)
                 writer.writerow(data_csv)
@@ -421,11 +361,7 @@ def gen_csv_header():
     global number_row, max_row, file_name
 
     file_name += 1
-<<<<<<< HEAD
     header = ['number', 'id', 'name', 'speed', 'positionX', 'positionY', 'timestamp', 'in', 'out',
-=======
-    header = ['number', 'id', 'name', 'speed', 'positionX', 'positionY', 'timestamp', 'lane', 'in', 'out',
->>>>>>> fdabdee22678acdfa556e8dd3b2156305d667b47
               'left_id', 'front_id', 'right_id', 'back_id',
               'left_distance', 'front_distance', 'right_distance', 'back_distance']
     with open('../../../csv/' + str(file_name) + '.csv', 'w', encoding='UTF8', newline='') as f:
@@ -475,11 +411,8 @@ class DetectionPredictor(BasePredictor):
         return preds
 
     def write_results(self, idx, preds, batch, vid_cap):
-<<<<<<< HEAD
         global cfg_rslt
 
-=======
->>>>>>> fdabdee22678acdfa556e8dd3b2156305d667b47
         p, im, im0 = batch
         all_outputs = []
         log_string = ""
@@ -503,13 +436,9 @@ class DetectionPredictor(BasePredictor):
         det = preds[idx]
         all_outputs.append(det)
         if len(det) == 0:
-<<<<<<< HEAD
             imgNew = Image.new("RGB", cfg_rslt, (0, 0, 0))
             imgNew = np.asarray(imgNew)
             return {'log': log_string, 'list': [], 'draw': imgNew, 'totalImg': imgNew}
-=======
-            return log_string
->>>>>>> fdabdee22678acdfa556e8dd3b2156305d667b47
         for c in det[:, 5].unique():
             n = (det[:, 5] == c).sum()  # detections per class
             log_string += f"{n} {self.model.names[int(c)]},"
@@ -540,38 +469,22 @@ class DetectionPredictor(BasePredictor):
             return {'log': log_string, 'list': val['list'], 'draw': imgNew, 'totalImg': val['totalImg']}
 
         # print(log_string)
-<<<<<<< HEAD
         imgNew = Image.new("RGB", cfg_rslt, (0, 0, 0))
-=======
-        imgNew = Image.new("RGB", (640, 360), (0, 0, 0))
->>>>>>> fdabdee22678acdfa556e8dd3b2156305d667b47
         imgNew = np.asarray(imgNew)
         return {'log': log_string, 'list': [], 'draw': imgNew, 'totalImg': imgNew}
 
     def emit_image(self, p, s1, s2, draw, total):
-<<<<<<< HEAD
         global cfg_rslt
         # draw = np.asarray(draw)
 
         im0 = self.annotator.result()
         # frame_resized = cv2.resize(im0, cfg_rslt)
         frame_resized_total = cv2.resize(total, cfg_rslt)
-=======
-        # draw = np.asarray(draw)
-
-        im0 = self.annotator.result()
-        frame_resized = cv2.resize(im0, (640, 360))
-        frame_resized_total = cv2.resize(total, (640, 360))
->>>>>>> fdabdee22678acdfa556e8dd3b2156305d667b47
 
         # Encode the processed image as a JPEG-encoded base64 string
         encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 90]
         _, frame_encoded = cv2.imencode(
-<<<<<<< HEAD
             ".jpg", im0, encode_param)
-=======
-            ".jpg", frame_resized, encode_param)
->>>>>>> fdabdee22678acdfa556e8dd3b2156305d667b47
         processed_img_data = base64.b64encode(frame_encoded).decode()
 
         _, frame_encoded_draw = cv2.imencode(
@@ -597,17 +510,11 @@ class DetectionPredictor(BasePredictor):
 
 # @hydra.main(version_base=None, config_path=str(DEFAULT_CONFIG.parent), config_name=DEFAULT_CONFIG.name)
 def predict(cfg):
-<<<<<<< HEAD
     global cfg_ppm, cfg_border, line, cfg_center
     cfg_ppm = cfg['ppm']
     cfg_border = cfg['border']
     cfg_center = cfg['center']
     line = cfg['gate']
-=======
-    global cfg_ppm, cfg_border
-    cfg_ppm = cfg['ppm']
-    cfg_border = cfg['border']
->>>>>>> fdabdee22678acdfa556e8dd3b2156305d667b47
     init_tracker()
     # cfg.model = cfg.model or "yolov8n.pt"
     # cfg.imgsz = check_imgsz(cfg.imgsz, min_dim=2)  # check image size
