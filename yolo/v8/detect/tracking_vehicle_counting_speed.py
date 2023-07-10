@@ -22,6 +22,9 @@ from deep_sort_pytorch.deep_sort import DeepSort
 from collections import deque
 import numpy as np
 
+from tkinter import *
+from PIL import Image, ImageTk, ImageDraw
+
 palette = (2 ** 11 - 1, 2 ** 15 - 1, 2 ** 20 - 1)
 data_deque = {}
 deepsort = None
@@ -46,6 +49,31 @@ first_frame = None
 prev_gray = None
 mask = None
 prev = None
+
+# ui
+root = Tk()
+root.bind('<Escape>', lambda e: root.quit())
+root.title("Vehicle - Tracking")
+root.config(bg="black")
+
+left_frame = Frame(root, width=200, height=400, bg='grey')
+left_frame.grid(row=0, column=0, padx=5, pady=5)
+
+right_frame = Frame(root, width=650, height=400, bg='grey')
+right_frame.grid(row=0, column=1, padx=5, pady=5)
+
+canvas = Canvas(right_frame, width=650, height=400)
+canvas.grid(row=0, column=0, padx=5, pady=5)
+
+draw_line = [0, 0, 0, 0]
+# right_frame.create_line(0, 150, 340, 200, fill="green")
+
+# vid = cv2.VideoCapture("test.mp4")
+
+# var
+varVid = IntVar()
+varPPM = IntVar()
+varPPM.set(8)
 
 
 def init_tracker():
@@ -186,7 +214,7 @@ def get_direction(point1, point2):
 def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0, 0)):
     global number_row, max_row, file_name, calc_timestamps
 
-    cv2.line(img, line[0], line[1], (46, 162, 112), 3)
+    # cv2.line(img, line[0], line[1], (46, 162, 112), 3)
 
     height, width, _ = img.shape
     # remove tracked point from buffer if object is lost
@@ -213,7 +241,7 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
             speed_line_queue[id] = []
         color = compute_color_for_labels(object_id[i])
         obj_name = names[object_id[i]]
-        label = '{}{:d}'.format("", id) + ":" + '%s' % (obj_name)
+        label = "ID:" + '{}{:d}'.format("", id) + ":" + '%s' % (obj_name)
 
         # add center to buffer
         data_deque[id].appendleft(center)
@@ -222,7 +250,7 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
             object_speed = estimatespeed(data_deque[id][1], data_deque[id][0])
             speed_line_queue[id].append(object_speed)
             if intersect(data_deque[id][0], data_deque[id][1], line[0], line[1]):
-                cv2.line(img, line[0], line[1], (255, 255, 255), 3)
+                # cv2.line(img, line[0], line[1], (255, 255, 255), 3)
                 if "South" in direction:
                     if obj_name not in object_counter:
                         object_counter[obj_name] = 1
@@ -238,13 +266,19 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
         if (number_row % max_row == 0):
             gen_csv_header()
         number_row += 1
-        cap_timestamp = vid_cap.get(cv2.CAP_PROP_POS_MSEC)
-        fps = vid_cap.get(cv2.CAP_PROP_FPS)
-        calc_timestamp = calc_timestamps + 1000 / fps
-        cur_timestamp = int(start_time + abs(cap_timestamp - calc_timestamp))
+        cur_timestamp = start_time
 
         try:
-            label = label + " " + \
+            cap_timestamp = vid_cap.get(cv2.CAP_PROP_POS_MSEC)
+            fps = vid_cap.get(cv2.CAP_PROP_FPS)
+            calc_timestamp = calc_timestamps + 1000 / fps
+            cur_timestamp = int(
+                start_time + abs(cap_timestamp - calc_timestamp))
+        except:
+            pass
+
+        try:
+            label = label + " speed:" + \
                 str(sum(speed_line_queue[id]) //
                     len(speed_line_queue[id])) + "km/h"
 
@@ -277,25 +311,25 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
                      data_deque[id][i], color, thickness)
 
     # 4. Display Count in top right corner
-        for idx, (key, value) in enumerate(object_counter1.items()):
-            cnt_str = str(key) + ":" + str(value)
-            cv2.line(img, (width - 500, 25), (width, 25), [85, 45, 255], 40)
-            cv2.putText(img, f'Number of Vehicles Entering', (width - 500, 35),
-                        0, 1, [225, 255, 255], thickness=2, lineType=cv2.LINE_AA)
-            cv2.line(img, (width - 150, 65 + (idx*40)),
-                     (width, 65 + (idx*40)), [85, 45, 255], 30)
-            cv2.putText(img, cnt_str, (width - 150, 75 + (idx*40)), 0,
-                        1, [255, 255, 255], thickness=2, lineType=cv2.LINE_AA)
+        # for idx, (key, value) in enumerate(object_counter1.items()):
+        #     cnt_str = str(key) + ":" + str(value)
+        #     cv2.line(img, (width - 500, 25), (width, 25), [85, 45, 255], 40)
+        #     cv2.putText(img, f'Number of Vehicles Entering', (width - 500, 35),
+        #                 0, 1, [225, 255, 255], thickness=2, lineType=cv2.LINE_AA)
+        #     cv2.line(img, (width - 150, 65 + (idx*40)),
+        #              (width, 65 + (idx*40)), [85, 45, 255], 30)
+        #     cv2.putText(img, cnt_str, (width - 150, 75 + (idx*40)), 0,
+        #                 1, [255, 255, 255], thickness=2, lineType=cv2.LINE_AA)
 
-        for idx, (key, value) in enumerate(object_counter.items()):
-            cnt_str1 = str(key) + ":" + str(value)
-            cv2.line(img, (20, 25), (500, 25), [85, 45, 255], 40)
-            cv2.putText(img, f'Numbers of Vehicles Leaving', (11, 35), 0, 1, [
-                        225, 255, 255], thickness=2, lineType=cv2.LINE_AA)
-            cv2.line(img, (20, 65 + (idx*40)),
-                     (127, 65 + (idx*40)), [85, 45, 255], 30)
-            cv2.putText(img, cnt_str1, (11, 75 + (idx*40)), 0, 1,
-                        [225, 255, 255], thickness=2, lineType=cv2.LINE_AA)
+        # for idx, (key, value) in enumerate(object_counter.items()):
+        #     cnt_str1 = str(key) + ":" + str(value)
+        #     cv2.line(img, (20, 25), (500, 25), [85, 45, 255], 40)
+        #     cv2.putText(img, f'Numbers of Vehicles Leaving', (11, 35), 0, 1, [
+        #                 225, 255, 255], thickness=2, lineType=cv2.LINE_AA)
+        #     cv2.line(img, (20, 65 + (idx*40)),
+        #              (127, 65 + (idx*40)), [85, 45, 255], 30)
+        #     cv2.putText(img, cnt_str1, (11, 75 + (idx*40)), 0, 1,
+        #                 [225, 255, 255], thickness=2, lineType=cv2.LINE_AA)
 
     return img
 
@@ -304,7 +338,7 @@ def gen_csv_header():
     global number_row, max_row, file_name
 
     file_name += 1
-    header = ['number', 'id', 'name', 'speed', 'positionX', 'positionY', 'timestamp', 'lane',
+    header = ['number', 'id', 'name', 'speed', 'positionX', 'positionY', 'timestamp', 'lane', 'in', 'out',
               'left_id', 'front_id', 'right_id', 'back_id',
               'left_distance', 'front_distance', 'right_distance', 'back_distance']
     with open('../../../csv/' + str(file_name) + '.csv', 'w', encoding='UTF8', newline='') as f:
@@ -317,7 +351,7 @@ def estimatespeed(Location1, Location2):
     d_pixel = math.sqrt(math.pow(
         Location2[0] - Location1[0], 2) + math.pow(Location2[1] - Location1[1], 2))
     # defining thr pixels per meter
-    ppm = 8
+    ppm = varPPM
     d_meters = d_pixel/ppm
     time_constant = 15*3.6
     # distance = speed/time
@@ -339,22 +373,51 @@ def sparse_solution(img):
         mask = np.zeros_like(first_frame)
 
     gray = cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY)
-    prev = cv2.goodFeaturesToTrack(prev_gray, mask=None, **feature_params)
-    next, status, error = cv2.calcOpticalFlowPyrLK(
-        prev_gray, gray, prev, None, **lk_params)
-    good_old = prev[status == 1].astype(int)
-    good_new = next[status == 1].astype(int)
 
-    for i, (new, old) in enumerate(zip(good_new, good_old)):
-        a, b = new.ravel()
-        c, d = old.ravel()
-        mask = cv2.line(mask, (a, b), (c, d), (0, 255, 0), 2)
-        img2 = cv2.circle(img2, (a, b), 3, (0, 255, 0), -1)
-    output = cv2.add(img2, mask)
-    prev_gray = gray.copy()
-    prev = good_new.reshape(-1, 1, 2)
+    # prev = cv2.goodFeaturesToTrack(prev_gray, mask=None, **feature_params)
+    # next, status, error = cv2.calcOpticalFlowPyrLK(
+    #     prev_gray, gray, prev, None, **lk_params)
+    # good_old = prev[status == 1].astype(int)
+    # good_new = next[status == 1].astype(int)
+
+    # for i, (new, old) in enumerate(zip(good_new, good_old)):
+    #     a, b = new.ravel()
+    #     c, d = old.ravel()
+    #     mask = cv2.line(mask, (a, b), (c, d), (0, 255, 0), 2)
+    #     img2 = cv2.circle(img2, (a, b), 3, (0, 255, 0), -1)
+    # output = cv2.add(img2, mask)
+    # prev_gray = gray.copy()
+    # prev = good_new.reshape(-1, 1, 2)
 
     return output
+
+
+def selVid():
+    print("You selected the video " + str(varVid.get()))
+
+
+def draw():
+    global draw_line
+    draw_line = []
+
+
+def paint(event):
+    if len(draw_line) < 4:
+        draw_line.append(event.x)
+        draw_line.append(event.y)
+
+        x1, y1 = (event.x - 4), (event.y - 4)
+        x2, y2 = (event.x + 4), (event.y + 4)
+        canvas.create_oval(x1, y1, x2, y2, fill="red")
+
+    if len(draw_line) == 4:
+        canvas.create_line(draw_line[0], draw_line[1],
+                           draw_line[2], draw_line[3], fill="red")
+
+
+def get_draw_area():
+    print(canvas)
+    # canvas.delete("line")
 
 
 class DetectionPredictor(BasePredictor):
@@ -435,9 +498,34 @@ class DetectionPredictor(BasePredictor):
 
         return log_string
 
+    def ui_start(self, p):
+        im0 = self.annotator.result()
+        frame = cv2.resize(im0, (650, 400))
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGBA)
+        img_update = ImageTk.PhotoImage(Image.fromarray(frame))
+
+        canvas.create_image(0, 0, image=img_update, anchor='nw')
+        # Label(right_frame, image=img_update).grid(
+        #     row=0, column=0, padx=5, pady=5)
+
+        # tool_bar3 = Frame(left_frame, width=500, height=185)
+        # tool_bar3.grid(row=4, column=0, padx=5, pady=5)
+        # Label(tool_bar3, text="Output: ", relief=RAISED).grid(
+        #     row=1, column=0, padx=5, pady=3)
+
+        # right_frame.photo_image = img_update
+        # right_frame.image = img_update
+
+        root.update()
+        cv2.waitKey(1)
+
+    # def ui_end(self):
+    #     self.run_callbacks("on_predict_batch_end")
+
 
 @hydra.main(version_base=None, config_path=str(DEFAULT_CONFIG.parent), config_name=DEFAULT_CONFIG.name)
 def predict(cfg):
+    print(cfg)
     init_tracker()
     cfg.model = cfg.model or "yolov8n.pt"
     cfg.imgsz = check_imgsz(cfg.imgsz, min_dim=2)  # check image size
@@ -446,5 +534,80 @@ def predict(cfg):
     predictor()
 
 
+def init():
+    first_vid = cv2.VideoCapture("test2.mp4")
+    _, first_frame = first_vid.read()
+    first_frame = cv2.resize(first_frame, (650, 400))
+    first_frame = cv2.cvtColor(first_frame, cv2.COLOR_BGR2RGBA)
+    first_img = Image.fromarray(first_frame)
+    draw_img = ImageDraw.Draw(first_img)
+    photo = ImageTk.PhotoImage(image=first_img)
+
+    canvas.create_image(0, 0, image=photo, anchor='nw')
+    canvas.bind("<ButtonPress-1>", paint)
+
+    tool_bar = Frame(left_frame, width=500, height=185)
+    tool_bar.grid(row=1, column=0, padx=5, pady=5)
+
+    tool_bar1 = Frame(left_frame, width=500, height=185)
+    tool_bar1.grid(row=2, column=0, padx=5, pady=5)
+
+    tool_bar2 = Frame(left_frame, width=500, height=185)
+    tool_bar2.grid(row=3, column=0, padx=5, pady=5)
+
+    tool_bar3 = Frame(left_frame, width=500, height=185)
+    tool_bar3.grid(row=4, column=0, padx=5, pady=5)
+
+    Label(tool_bar, text="Input", relief=RAISED).grid(
+        row=0, column=0, padx=5, pady=3, ipadx=10)
+    Label(tool_bar1, text="Options", relief=RAISED).grid(
+        row=0, column=1, columnspan=4, padx=5, pady=3, ipadx=10)
+    Label(tool_bar2, text="Process", relief=RAISED).grid(
+        row=0, column=5, padx=5, pady=3, ipadx=10)
+    Label(tool_bar2, text="Lines", relief=RAISED).grid(
+        row=0, column=6, padx=5, pady=3, ipadx=10)
+
+    Entry(tool_bar, textvariable="", font=('calibre', 10, 'normal')).grid(
+        row=1, column=0, padx=5, pady=3, ipadx=10)
+    Label(tool_bar, text="Or", relief=RAISED).grid(
+        row=2, column=0, padx=5, pady=3, ipadx=10)
+    Radiobutton(tool_bar, text="test.mp4", variable=varVid, value=0, command=selVid).grid(
+        row=3, column=0, padx=5, pady=5)
+    Radiobutton(tool_bar, text="test2.mp4", variable=varVid, value=1, command=selVid).grid(
+        row=4, column=0, padx=5, pady=5)
+
+    Label(tool_bar1, text="HH:MM", relief=RAISED).grid(
+        row=1, column=1, padx=5, pady=3)
+    Spinbox(tool_bar1, from_=0, to=23, wrap=True, textvariable="", font=('Times', 14), width=2, justify=CENTER).grid(
+        row=1, column=2, padx=0, pady=5)
+    Spinbox(tool_bar1, from_=0, to=59, wrap=True, textvariable="", font=('Times', 14), width=2, justify=CENTER).grid(
+        row=1, column=3, padx=0, pady=5)
+    Button(tool_bar1, text="Now").grid(row=1, column=4, padx=5, pady=5)
+    Label(tool_bar1, text="pixels / meter", relief=RAISED).grid(
+        row=2, column=1, padx=5, pady=3)
+    Spinbox(tool_bar1, from_=0, to=100, wrap=True, textvariable=varPPM, font=('Times', 14), width=2, justify=CENTER).grid(
+        row=2, column=2, padx=0, pady=5)
+
+    #  Scale(tool_bar3, from_=0, to=50, tickinterval= 50, orient=HORIZONTAL, length=200).grid(
+    #     row=1, column=1, padx=5, pady=5)
+    # Scale(tool_bar3, from_=0, to=50, tickinterval= 50, orient=HORIZONTAL, length=200).grid(
+    #     row=1, column=1, padx=5, pady=5)
+    # Scale(tool_bar3, from_=0, to=50, tickinterval= 50, orient=HORIZONTAL, length=200).grid(
+    #     row=1, column=1, padx=5, pady=5)
+
+    Button(tool_bar2, text="Start", command=predict).grid(
+        row=1, column=5, padx=5, pady=5)
+    Button(tool_bar2, text="Stop").grid(row=2, column=5, padx=5, pady=5)
+    Button(tool_bar2, text="Draw", command=draw).grid(
+        row=1, column=6, padx=5, pady=5)
+    Button(tool_bar2, text="Undo", command=get_draw_area).grid(
+        row=2, column=6, padx=5, pady=5)
+
+    Label(tool_bar3, text="Output: ", relief=RAISED).grid(
+        row=1, column=0, padx=5, pady=3)
+
+    root.mainloop()
+
+
 if __name__ == "__main__":
-    predict()
+    init()
