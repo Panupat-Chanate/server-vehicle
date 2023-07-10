@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 number,id,name,speed,positionX,positionY,timestamp,in,out,left_id,front_id,right_id,back_id,left_distance,front_distance,right_distance,back_distance
 1,1,Car_7,,1434,277,1688921115091,,
 2,2,Car_7,,1352,332,1688921115091,,
@@ -3326,3 +3327,28 @@ number,id,name,speed,positionX,positionY,timestamp,in,out,left_id,front_id,right
 3325,336,Car_7,16km/h,1035,257,1688921116724,,
 3326,337,Car_7,19km/h,339,506,1688921116724,,
 3327,338,Motorcycle,0km/h,1454,159,1688921116724,,
+=======
+number,id,name,speed,positionX,positionY,timestamp,lane,in,out,left_id,front_id,right_id,back_id,left_distance,front_distance,right_distance,back_distance
+1,2,motorcycle,,1059,599,1688877666391
+2,4,car,,457,377,1688877666391
+3,5,person,,1070,569,1688877666391
+4,6,bicycle,,1059,599,1688877666391
+5,7,traffic light,,587,323,1688877666391
+6,8,car,,840,410,1688877666391
+7,9,car,,1240,516,1688877666391
+8,10,traffic light,,310,319,1688877666391
+9,11,traffic light,,1035,75,1688877666391
+10,12,car,,602,481,1688877666391
+11,13,truck,,107,529,1688877666391
+12,2,motorcycle,9km/h,1058,600,1688877666424
+13,4,car,13km/h,459,377,1688877666424
+14,5,person,9km/h,1069,570,1688877666424
+15,6,bicycle,0km/h,1059,599,1688877666424
+16,7,traffic light,0km/h,587,323,1688877666424
+17,8,car,75km/h,851,412,1688877666424
+18,9,car,0km/h,1240,516,1688877666424
+19,10,traffic light,0km/h,310,319,1688877666424
+20,11,traffic light,6km/h,1035,74,1688877666424
+21,12,car,51km/h,595,484,1688877666424
+22,13,truck,27km/h,103,529,1688877666424
+>>>>>>> fdabdee22678acdfa556e8dd3b2156305d667b47
