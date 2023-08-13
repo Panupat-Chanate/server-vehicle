@@ -2,12 +2,13 @@ import cv2
 import numpy as np
 import base64
 import os
+import sys
 
 from flask import Flask, render_template
 from flask_socketio import SocketIO, emit
 
 from detect import predict
-
+import pyautogui
 
 # server app
 app = Flask(__name__)
@@ -40,7 +41,8 @@ def receive_image(message):
 def receive_image(message):
     cap = cv2.VideoCapture(message['data'])
     _, frame = cap.read()
-    frame_resized = cv2.resize(frame, (640, 360))
+    height, width, _ = frame.shape
+    # frame_resized = cv2.resize(frame, (640, 360))
 
     # Encode the processed image as a JPEG-encoded base64 string
     encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 90]
@@ -52,12 +54,14 @@ def receive_image(message):
     b64_src = "data:image/jpg;base64,"
     processed_img_data = b64_src + processed_img_data
 
-    emit('first image', {'data': processed_img_data})
+    emit('first image', {'data': processed_img_data,
+         'height': height, 'width': width})
 
 
 @socketio.on('connect')
 def test_connect():
     emit('my connect', {'data': 'Connected'}, broadcast=True)
+    # restart_program()
 
 import subprocess
 def restart_server():
@@ -66,12 +70,13 @@ def restart_server():
 @socketio.on('client_disconnecting')
 def disconnect_details():
     emit('my connect', {'data': 'Disconnected'})
-    restart_server()
+    restart_program()
 
 
 @socketio.on('stop')
 def test_connent():
-    os.system("cmd")
+    pyautogui.hotkey("ctrl", 's')
+    pyautogui.press('enter')
 
 
 # function
@@ -103,6 +108,11 @@ def predict_test(image):
         # Send the processed image back to the client
         cv2.waitKey(1)
         emit("my image", processed_img_data)
+
+
+def restart_program():
+    python = sys.executable
+    os.execl(python, python, *sys.argv)
 
 
 if __name__ == '__main__':

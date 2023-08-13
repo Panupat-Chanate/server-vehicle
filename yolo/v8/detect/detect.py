@@ -13,6 +13,7 @@ import torch
 import torch.backends.cudnn as cudnn
 from numpy import random
 
+from ultralytics.yolo.v8.detect.predict import DetectionPredictor
 from ultralytics.yolo.engine.predictor import BasePredictor
 from ultralytics.yolo.utils import DEFAULT_CONFIG, ROOT, ops
 from ultralytics.yolo.utils.checks import check_imgsz
@@ -32,7 +33,7 @@ deepsort = None
 object_counter = {}
 object_counter1 = {}
 # line = [(100, 500), (1050, 500)]
-line = [(402, 470), (606, 559)]
+line = [402, 470, 606, 559]
 speed_line_queue = {}
 cfg_ppm = 8
 cfg_border = True
@@ -47,6 +48,7 @@ file_name = 0
 max_row = 25000000 - 1
 start_time = int(time.time() * 1000)
 calc_timestamps = 0.0
+cur_timestamp = None
 
 
 def xyxy_to_xywh(*xyxy):
@@ -174,7 +176,7 @@ def get_direction(point1, point2):
 
 
 def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0, 0)):
-    global number_row, max_row, file_name, calc_timestamps, data_deque_unlimit, data_deque_gate, cfg_center
+    global cur_timestamp, number_row, max_row, file_name, calc_timestamps, data_deque_unlimit, data_deque_gate, cfg_center
 
     img2 = img.copy()
     height, width, _ = img.shape
@@ -190,7 +192,7 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
 
     # draw gate
     # for i in line:
-    #     cv2.line(img, (i[0], i[1]), (i[2], i[3]), (255, 0, 0), 1)
+    #     cv2.line(img, (i[0], i[1]), (i[2], i[3]), (255, 255, 255), 1)
 
     # remove tracked point from buffer if object is lost
     for key in list(data_deque):
@@ -239,8 +241,8 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
 
             for i, gate in enumerate(line):
                 if intersect(data_deque[id][0], data_deque[id][1], (gate[0], gate[1]), (gate[2], gate[3])):
-                    # cv2.line(img, (gate[0], gate[1]),
-                    #          (gate[2], gate[3]), (0, 0, 255), 3)
+                    cv2.line(img, (gate[0], gate[1]),
+                             (gate[2], gate[3]), (0, 255, 255), 3)
 
                     data_deque_gate[id].append(i)
 
@@ -258,8 +260,10 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
         # gen header csv
         if (number_row % max_row == 0):
             gen_csv_header()
+        if (cur_timestamp == None):
+            cur_timestamp = start_time
+
         number_row += 1
-        cur_timestamp = start_time
 
         try:
             cap_timestamp = vid_cap.get(cv2.CAP_PROP_POS_MSEC)
@@ -386,6 +390,152 @@ def estimatespeed(Location1, Location2):
 ##########################################################################################
 
 
+class SegmentationPredictor(DetectionPredictor):
+    def postprocess(self, preds, img, orig_img):
+        masks = []
+        # TODO: filter by classes
+        p = ops.non_max_suppression(preds[0],
+                                    self.args.conf,
+                                    self.args.iou,
+                                    agnostic=self.args.agnostic_nms,
+                                    max_det=self.args.max_det,
+                                    nm=32)
+        proto = preds[1][-1]
+        for i, pred in enumerate(p):
+            shape = orig_img[i].shape if self.webcam else orig_img.shape
+            if not len(pred):
+                continue
+            if self.args.retina_masks:
+                pred[:, :4] = ops.scale_boxes(
+                    img.shape[2:], pred[:, :4], shape).round()
+                masks.append(ops.process_mask_native(
+                    proto[i], pred[:, 6:], pred[:, :4], shape[:2]))  # HWC
+            else:
+                masks.append(ops.process_mask(
+                    proto[i], pred[:, 6:], pred[:, :4], img.shape[2:], upsample=True))  # HWC
+                pred[:, :4] = ops.scale_boxes(
+                    img.shape[2:], pred[:, :4], shape).round()
+
+        return (p, masks)
+
+    def write_results(self, idx, preds, batch, vid_cap):
+        global cfg_rslt
+
+        p, im, im0 = batch
+        all_outputs = []
+        log_string = ""
+        if len(im.shape) == 3:
+            im = im[None]  # expand for batch dim
+        self.seen += 1
+        if self.webcam:  # batch_size >= 1
+            # log_string += f'{idx}: '
+            frame = self.dataset.count
+        else:
+            frame = getattr(self.dataset, 'frame', 0)
+
+        self.data_path = p
+        self.txt_path = str(self.save_dir / 'labels' / p.stem) + \
+            ('' if self.dataset.mode == 'image' else f'_{frame}')
+        # log_string += '%gx%g ' % im.shape[2:]  # print string
+        self.annotator = self.get_annotator(im0)
+
+        preds, masks = preds
+        det = preds[idx]
+        all_outputs.append(det)
+        if len(det) == 0:
+            # return log_string
+            imgNew = Image.new("RGB", cfg_rslt, (0, 0, 0))
+            imgNew = np.asarray(imgNew)
+            return {'log': log_string, 'list': [], 'draw': imgNew, 'totalImg': imgNew}
+        # Segments
+        mask = masks[idx]
+        if self.args.save_txt:
+            segments = [
+                ops.scale_segments(
+                    im0.shape if self.args.retina_masks else im.shape[2:], x, im0.shape, normalize=True)
+                for x in reversed(ops.masks2segments(mask))]
+
+        # Print results
+        for c in det[:, 5].unique():
+            n = (det[:, 5] == c).sum()  # detections per class
+            # add to string
+            log_string += f"{n} {self.model.names[int(c)]}{'s' * (n > 1)}, "
+
+        # Mask plotting
+        self.annotator.masks(
+            mask,
+            colors=[colors(x, True) for x in det[:, 5]],
+            im_gpu=torch.as_tensor(im0, dtype=torch.float16).to(self.device).permute(2, 0, 1).flip(0).contiguous() /
+            255 if self.args.retina_masks else im[idx])
+
+        det = reversed(det[:, :6])
+        self.all_outputs.append([det, mask])
+        xywh_bboxs = []
+        confs = []
+        oids = []
+        outputs = []
+        # Write results
+        for j, (*xyxy, conf, cls) in enumerate(reversed(det[:, :6])):
+            x_c, y_c, bbox_w, bbox_h = xyxy_to_xywh(*xyxy)
+            xywh_obj = [x_c, y_c, bbox_w, bbox_h]
+            xywh_bboxs.append(xywh_obj)
+            confs.append([conf.item()])
+            oids.append(int(cls))
+        xywhs = torch.Tensor(xywh_bboxs)
+        confss = torch.Tensor(confs)
+
+        outputs = deepsort.update(xywhs, confss, oids, im0)
+        if len(outputs) > 0:
+            bbox_xyxy = outputs[:, :4]
+            identities = outputs[:, -2]
+            object_id = outputs[:, -1]
+
+            # draw_boxes(im0, bbox_xyxy, self.model.names, object_id, identities)
+            val = draw_boxes(im0, bbox_xyxy, self.model.names,
+                             object_id, vid_cap, identities)
+            imgNew = np.asarray(val['draw'])
+            return {'log': log_string, 'list': val['list'], 'draw': imgNew, 'totalImg': val['totalImg']}
+
+        # return log_string
+        imgNew = Image.new("RGB", cfg_rslt, (0, 0, 0))
+        imgNew = np.asarray(imgNew)
+        return {'log': log_string, 'list': [], 'draw': imgNew, 'totalImg': imgNew}
+
+    def emit_image(self, p, s1, s2, draw, total):
+        global cfg_rslt
+        # draw = np.asarray(draw)
+
+        im0 = self.annotator.result()
+        # frame_resized = cv2.resize(im0, cfg_rslt)
+        # frame_resized_total = cv2.resize(total, cfg_rslt)
+
+        # Encode the processed image as a JPEG-encoded base64 string
+        encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 90]
+        _, frame_encoded = cv2.imencode(
+            ".jpg", im0, encode_param)
+        processed_img_data = base64.b64encode(frame_encoded).decode()
+
+        _, frame_encoded_draw = cv2.imencode(
+            ".jpg", draw, encode_param)
+        processed_img_data_draw = base64.b64encode(frame_encoded_draw).decode()
+
+        _, frame_encoded_total = cv2.imencode(
+            ".jpg", total, encode_param)
+        processed_img_data_total = base64.b64encode(
+            frame_encoded_total).decode()
+
+        # Prepend the base64-encoded string with the data URL prefix
+        b64_src = "data:image/jpg;base64,"
+        processed_img_data = b64_src + processed_img_data
+        processed_img_data_draw = b64_src + processed_img_data_draw
+        processed_img_data_total = b64_src + processed_img_data_total
+
+        # Send the processed image back to the client
+        cv2.waitKey(1)
+        emit("my image", {'data': processed_img_data,
+             'list': s2, 'log': s1, 'draw': processed_img_data_draw, 'totalImg': processed_img_data_total})
+
+
 class DetectionPredictor(BasePredictor):
     def get_annotator(self, img):
         return Annotator(img, line_width=self.args.line_thickness, example=str(self.model.names))
@@ -479,7 +629,7 @@ class DetectionPredictor(BasePredictor):
 
         im0 = self.annotator.result()
         # frame_resized = cv2.resize(im0, cfg_rslt)
-        frame_resized_total = cv2.resize(total, cfg_rslt)
+        # frame_resized_total = cv2.resize(total, cfg_rslt)
 
         # Encode the processed image as a JPEG-encoded base64 string
         encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 90]
@@ -492,7 +642,7 @@ class DetectionPredictor(BasePredictor):
         processed_img_data_draw = base64.b64encode(frame_encoded_draw).decode()
 
         _, frame_encoded_total = cv2.imencode(
-            ".jpg", frame_resized_total, encode_param)
+            ".jpg", total, encode_param)
         processed_img_data_total = base64.b64encode(
             frame_encoded_total).decode()
 
@@ -510,17 +660,22 @@ class DetectionPredictor(BasePredictor):
 
 # @hydra.main(version_base=None, config_path=str(DEFAULT_CONFIG.parent), config_name=DEFAULT_CONFIG.name)
 def predict(cfg):
-    global cfg_ppm, cfg_border, line, cfg_center
+    global cfg_ppm, cfg_border, line, cfg_center, start_time
     cfg_ppm = cfg['ppm']
     cfg_border = cfg['border']
     cfg_center = cfg['center']
     line = cfg['gate']
+    start_time = cfg["startTime"]
+
     init_tracker()
+
     # cfg.model = cfg.model or "yolov8n.pt"
     # cfg.imgsz = check_imgsz(cfg.imgsz, min_dim=2)  # check image size
     # cfg.source = cfg.source if cfg.source is not None else ROOT / "assets"
     cfg['imgsz'] = check_imgsz(cfg['imgsz'], min_dim=2)
-    predictor = DetectionPredictor(cfg)
+
+    # predictor = DetectionPredictor(cfg)
+    predictor = SegmentationPredictor(cfg)
     predictor()
 
 
