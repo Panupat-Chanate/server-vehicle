@@ -59,10 +59,14 @@ def receive_image(message):
 def test_connect():
     emit('my connect', {'data': 'Connected'}, broadcast=True)
 
+import subprocess
+def restart_server():
+    subprocess.run("python server.py", shell=True)
 
 @socketio.on('client_disconnecting')
 def disconnect_details():
     emit('my connect', {'data': 'Disconnected'})
+    restart_server()
 
 
 @socketio.on('stop')
