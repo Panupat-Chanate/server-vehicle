@@ -38,9 +38,11 @@ speed_line_queue = {}
 cfg_ppm = 8
 cfg_border = True
 data_deque_unlimit = {}
+motorcycle_id = []
 data_deque_gate = {}
 cfg_rslt = (640, 360)
 cfg_center = "bottom"
+cfg_box_detect = None
 
 # csv
 number_row = 0
@@ -231,6 +233,11 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
         obj_name = names[object_id[i]]
         label = "ID:" + '{}{:d}'.format("", id) + ":" + '%s' % (obj_name)
 
+        if "motorcycle" in obj_name.lower():
+            found = next((mid for mid in motorcycle_id if mid == id), None)
+            if found is None:
+                motorcycle_id.append(id)
+
         # add center to buffer
         data_deque[id].appendleft(center)
         data_deque_unlimit[id].appendleft(center)
@@ -328,13 +335,19 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
 
     # draw trail unlimit
     for id in data_deque_unlimit:
+        have = next((mid for mid in motorcycle_id if mid == id), None)
+
         for i in range(1, len(data_deque_unlimit[id])):
             # check if on buffer value is none
             if data_deque_unlimit[id][i - 1] is None or data_deque_unlimit[id][i] is None:
                 continue
             # draw trails
-            cv2.line(img2, data_deque_unlimit[id][i - 1],
-                     data_deque_unlimit[id][i], (85, 45, 255), 2)
+            if have is None:
+                cv2.line(img2, data_deque_unlimit[id][i - 1],
+                         data_deque_unlimit[id][i], (0, 255, 0), 2)
+            else:
+                cv2.line(img2, data_deque_unlimit[id][i - 1],
+                         data_deque_unlimit[id][i], (0, 0, 255), 2)
 
     # 4. Display Count in top right corner
         # for idx, (key, value) in enumerate(object_counter1.items()):
@@ -422,7 +435,7 @@ class SegmentationPredictor(DetectionPredictor):
         global cfg_rslt
 
         p, im, im0 = batch
-        all_outputs = []
+        # all_outputs = []
         log_string = ""
         if len(im.shape) == 3:
             im = im[None]  # expand for batch dim
@@ -441,7 +454,7 @@ class SegmentationPredictor(DetectionPredictor):
 
         preds, masks = preds
         det = preds[idx]
-        all_outputs.append(det)
+        # all_outputs.append(det)
         if len(det) == 0:
             # return log_string
             imgNew = Image.new("RGB", cfg_rslt, (0, 0, 0))
@@ -469,7 +482,7 @@ class SegmentationPredictor(DetectionPredictor):
             255 if self.args.retina_masks else im[idx])
 
         det = reversed(det[:, :6])
-        self.all_outputs.append([det, mask])
+        # self.all_outputs.append([det, mask])
         xywh_bboxs = []
         confs = []
         oids = []
@@ -531,7 +544,6 @@ class SegmentationPredictor(DetectionPredictor):
         processed_img_data_total = b64_src + processed_img_data_total
 
         # Send the processed image back to the client
-        cv2.waitKey(1)
         emit("my image", {'data': processed_img_data,
              'list': s2, 'log': s1, 'draw': processed_img_data_draw, 'totalImg': processed_img_data_total})
 
@@ -653,18 +665,18 @@ class DetectionPredictor(BasePredictor):
         processed_img_data_total = b64_src + processed_img_data_total
 
         # Send the processed image back to the client
-        cv2.waitKey(1)
         emit("my image", {'data': processed_img_data,
              'list': s2, 'log': s1, 'draw': processed_img_data_draw, 'totalImg': processed_img_data_total})
 
 
 # @hydra.main(version_base=None, config_path=str(DEFAULT_CONFIG.parent), config_name=DEFAULT_CONFIG.name)
 def predict(cfg):
-    global cfg_ppm, cfg_border, line, cfg_center, start_time
+    global cfg_ppm, cfg_border, line, cfg_center, start_time, cfg_box_detect
     cfg_ppm = cfg['ppm']
     cfg_border = cfg['border']
     cfg_center = cfg['center']
     line = cfg['gate']
+    cfg_box_detect = cfg['box']
     start_time = cfg["startTime"]
 
     init_tracker()

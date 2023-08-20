@@ -173,8 +173,6 @@ class BasePredictor:
             self.run_callbacks("on_predict_batch_start")
             path, im, im0s, vid_cap, s = batch
 
-            # resize 1280 x 720
-            # im0s = cv2.resize(im0s, (1280, 720))
             visualize = increment_path(
                 self.save_dir / Path(path).stem, mkdir=True) if self.args.visualize else False
             with self.dt[0]:
@@ -199,8 +197,7 @@ class BasePredictor:
 
                 if self.args.show:
                     # self.show(p)
-                    self.emit_image(p, s, s2L['list'],
-                                    s2L['draw'], s2L['totalImg'])
+                    self.emit_image(p, s, s2L['list'], s2L['draw'], s2L['totalImg'])
 
                 if self.args.save:
                     self.save_preds(vid_cap, i, str(self.save_dir / p.name))

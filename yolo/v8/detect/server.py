@@ -8,7 +8,6 @@ from flask import Flask, render_template
 from flask_socketio import SocketIO, emit
 
 from detect import predict
-import pyautogui
 
 # server app
 app = Flask(__name__)
@@ -64,16 +63,10 @@ def test_connect():
     # restart_program()
 
 
-@socketio.on('client_disconnecting')
-def disconnect_details():
-    emit('my connect', {'data': 'Disconnected'})
-    restart_program()
-
-
 @socketio.on('stop')
 def test_connent():
-    pyautogui.hotkey("ctrl", 's')
-    pyautogui.press('enter')
+    emit('my connect', {'data': 'Disconnected'})
+    restart_program()
 
 
 # function
