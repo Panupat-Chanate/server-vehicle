@@ -197,10 +197,15 @@ class BasePredictor:
 
                 if self.args.show:
                     # self.show(p)
-                    self.emit_image(p, s, s2L['list'], s2L['draw'], s2L['totalImg'])
+                    self.emit_image(p, s, s2L['list'], s2L['draw'], s2L['totalImg'], s2L['heatmap'])
 
                 if self.args.save:
-                    self.save_preds(vid_cap, i, str(self.save_dir / p.name))
+                    im0rs = self.annotator.result()
+                    save_path = str(self.save_dir / p.name)
+                    save_path2 = str(self.save_dir / (p.stem + "_heatmap" + p.suffix))
+
+                    self.save_preds(vid_cap, im0rs, i, save_path)
+                    self.save_preds(vid_cap, s2L['heatmap'], i, save_path2)
 
                 s += s2L['log']
 
@@ -235,8 +240,8 @@ class BasePredictor:
         cv2.imshow(str(p), im0)
         cv2.waitKey(1)  # 1 millisecond
 
-    def save_preds(self, vid_cap, idx, save_path):
-        im0 = self.annotator.result()
+    def save_preds(self, vid_cap, im0, idx, save_path):
+        # im0 = self.annotator.result()
         # save imgs
         if self.dataset.mode == 'image':
             cv2.imwrite(save_path, im0)

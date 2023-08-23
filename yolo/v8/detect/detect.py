@@ -32,8 +32,8 @@ data_deque = {}
 deepsort = None
 object_counter = {}
 object_counter1 = {}
-# line = [(100, 500), (1050, 500)]
-line = [402, 470, 606, 559]
+# gates = [(100, 500), (1050, 500)]
+gates = [402, 470, 606, 559]
 speed_line_queue = {}
 cfg_ppm = 8
 cfg_border = True
@@ -43,6 +43,8 @@ data_deque_gate = {}
 cfg_rslt = (640, 360)
 cfg_center = "bottom"
 cfg_box_detect = None
+heatmap_count = 0
+global_img_array = None
 
 # csv
 number_row = 0
@@ -178,23 +180,26 @@ def get_direction(point1, point2):
 
 
 def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0, 0)):
-    global cur_timestamp, number_row, max_row, file_name, calc_timestamps, data_deque_unlimit, data_deque_gate, cfg_center
+    global global_img_array, heatmap_count, cur_timestamp, number_row, max_row, file_name, calc_timestamps, data_deque_unlimit, data_deque_gate, cfg_center
 
+    heatmap_count += 1
     img2 = img.copy()
+    img3 = img.copy()
     height, width, _ = img.shape
     imgNew = Image.new("RGB", (width, height), (0, 0, 0))
     draw = ImageDraw.Draw(imgNew)
+    draw = add_grid_lines(draw, height, width)
 
-    # for x in range(0, width, int(width / 25)):
-    #     draw.line(((x, 0), (x, height)), fill=128)
-    # for y in range(0, height, int(width / 100)):
-    #     draw.line(((0, y), (width, y)), fill=128)
+    if global_img_array is None:
+        global_img_array = np.ones([int(height), int(width)], dtype=np.uint32)
 
     vhc_list = []
 
     # draw gate
-    # for i in line:
-    #     cv2.line(img, (i[0], i[1]), (i[2], i[3]), (255, 255, 255), 1)
+    for i in gates:
+        start_point = (int(i[0]['x']), int(i[0]['y']))
+        end_point = (int(i[1]['x']), int(i[1]['y']))
+        cv2.line(img, start_point, end_point, (0, 0, 255), 1)
 
     # remove tracked point from buffer if object is lost
     for key in list(data_deque):
@@ -207,6 +212,7 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
         x2 += offset[0]
         y1 += offset[1]
         y2 += offset[1]
+        global_img_array[y1:y2, x1:x2] += 1
 
         # code to find center of bottom edge
         if (cfg_center == 'center'):
@@ -246,23 +252,25 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
             object_speed = estimatespeed(data_deque[id][1], data_deque[id][0])
             speed_line_queue[id].append(object_speed)
 
-            for i, gate in enumerate(line):
-                if intersect(data_deque[id][0], data_deque[id][1], (gate[0], gate[1]), (gate[2], gate[3])):
-                    cv2.line(img, (gate[0], gate[1]),
-                             (gate[2], gate[3]), (0, 255, 255), 3)
+            for i, gate in enumerate(gates):
+                start_point = (int(gate[0]['x']), int(gate[0]['y']))
+                end_point = (int(gate[1]['x']), int(gate[1]['y']))
+
+                if intersect(data_deque[id][0], data_deque[id][1], start_point, end_point):
+                    cv2.line(img, start_point, end_point, (255, 255, 255), 3)
 
                     data_deque_gate[id].append(i)
 
-                    # if "South" in direction:
-                    #     if obj_name not in object_counter:
-                    #         object_counter[obj_name] = 1
-                    #     else:
-                    #         object_counter[obj_name] += 1
-                    # if "North" in direction:
-                    #     if obj_name not in object_counter1:
-                    #         object_counter1[obj_name] = 1
-                    #     else:
-                    #         object_counter1[obj_name] += 1
+            # if "South" in direction:
+            #     if obj_name not in object_counter:
+            #         object_counter[obj_name] = 1
+            #     else:
+            #         object_counter[obj_name] += 1
+            # if "North" in direction:
+            #     if obj_name not in object_counter1:
+            #         object_counter1[obj_name] = 1
+            #     else:
+            #         object_counter1[obj_name] += 1
 
         # gen header csv
         if (number_row % max_row == 0):
@@ -349,29 +357,37 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
                 cv2.line(img2, data_deque_unlimit[id][i - 1],
                          data_deque_unlimit[id][i], (0, 0, 255), 2)
 
-    # 4. Display Count in top right corner
-        # for idx, (key, value) in enumerate(object_counter1.items()):
-        #     cnt_str = str(key) + ":" + str(value)
-        #     cv2.line(img, (width - 500, 25), (width, 25), [85, 45, 255], 40)
-        #     cv2.putText(img, f'Number of Vehicles Entering', (width - 500, 35),
-        #                 0, 1, [225, 255, 255], thickness=2, lineType=cv2.LINE_AA)
-        #     cv2.line(img, (width - 150, 65 + (idx*40)),
-        #              (width, 65 + (idx*40)), [85, 45, 255], 30)
-        #     cv2.putText(img, cnt_str, (width - 150, 75 + (idx*40)), 0,
-        #                 1, [255, 255, 255], thickness=2, lineType=cv2.LINE_AA)
+    # heatmap
+    global_img_array_norm = (global_img_array - global_img_array.min()) / \
+        (global_img_array.max() - global_img_array.min()) * 255
+    global_img_array_norm = global_img_array_norm.astype('uint8')
+    global_img_array_norm = cv2.GaussianBlur(global_img_array_norm, (9, 9), 0)
+    heatmap_img = cv2.applyColorMap(global_img_array_norm, cv2.COLORMAP_JET)
+    super_imposed_img = cv2.addWeighted(heatmap_img, 0.5, img3, 0.5, 0)
 
-        # for idx, (key, value) in enumerate(object_counter.items()):
-        #     cnt_str1 = str(key) + ":" + str(value)
-        #     cv2.line(img, (20, 25), (500, 25), [85, 45, 255], 40)
-        #     cv2.putText(img, f'Numbers of Vehicles Leaving', (11, 35), 0, 1, [
-        #                 225, 255, 255], thickness=2, lineType=cv2.LINE_AA)
-        #     cv2.line(img, (20, 65 + (idx*40)),
-        #              (127, 65 + (idx*40)), [85, 45, 255], 30)
-        #     cv2.putText(img, cnt_str1, (11, 75 + (idx*40)), 0, 1,
-        #                 [225, 255, 255], thickness=2, lineType=cv2.LINE_AA)
+    # 4. Display Count in top right corner
+    # for idx, (key, value) in enumerate(object_counter1.items()):
+    #     cnt_str = str(key) + ":" + str(value)
+    #     cv2.line(img, (width - 500, 25), (width, 25), [85, 45, 255], 40)
+    #     cv2.putText(img, f'Number of Vehicles Entering', (width - 500, 35),
+    #                 0, 1, [225, 255, 255], thickness=2, lineType=cv2.LINE_AA)
+    #     cv2.line(img, (width - 150, 65 + (idx*40)),
+    #              (width, 65 + (idx*40)), [85, 45, 255], 30)
+    #     cv2.putText(img, cnt_str, (width - 150, 75 + (idx*40)), 0,
+    #                 1, [255, 255, 255], thickness=2, lineType=cv2.LINE_AA)
+
+    # for idx, (key, value) in enumerate(object_counter.items()):
+    #     cnt_str1 = str(key) + ":" + str(value)
+    #     cv2.line(img, (20, 25), (500, 25), [85, 45, 255], 40)
+    #     cv2.putText(img, f'Numbers of Vehicles Leaving', (11, 35), 0, 1, [
+    #                 225, 255, 255], thickness=2, lineType=cv2.LINE_AA)
+    #     cv2.line(img, (20, 65 + (idx*40)),
+    #              (127, 65 + (idx*40)), [85, 45, 255], 30)
+    #     cv2.putText(img, cnt_str1, (11, 75 + (idx*40)), 0, 1,
+    #                 [225, 255, 255], thickness=2, lineType=cv2.LINE_AA)
 
     # return img
-    return {'list': vhc_list, 'draw': imgNew, 'totalImg': img2}
+    return {'list': vhc_list, 'draw': imgNew, 'totalImg': img2, 'heatmap': super_imposed_img}
 
 
 def gen_csv_header():
@@ -399,6 +415,19 @@ def estimatespeed(Location1, Location2):
 
     return int(speed)
 
+
+def add_grid_lines(draw, height, width):
+    ppm = int(int(cfg_ppm) * 2)
+
+    # Vertical lines
+    for x in range(0, width + 1, ppm):
+        draw.line([(x, 0), (x, height)], fill="gray")
+
+    # Horizontal lines
+    for y in range(0, height + 1, ppm):
+        draw.line([(0, y), (width, y)], fill="gray")
+
+    return draw
 
 ##########################################################################################
 
@@ -459,7 +488,7 @@ class SegmentationPredictor(DetectionPredictor):
             # return log_string
             imgNew = Image.new("RGB", cfg_rslt, (0, 0, 0))
             imgNew = np.asarray(imgNew)
-            return {'log': log_string, 'list': [], 'draw': imgNew, 'totalImg': imgNew}
+            return {'log': log_string, 'list': [], 'draw': imgNew, 'totalImg': imgNew, 'heatmap': imgNew}
         # Segments
         mask = masks[idx]
         if self.args.save_txt:
@@ -507,14 +536,14 @@ class SegmentationPredictor(DetectionPredictor):
             val = draw_boxes(im0, bbox_xyxy, self.model.names,
                              object_id, vid_cap, identities)
             imgNew = np.asarray(val['draw'])
-            return {'log': log_string, 'list': val['list'], 'draw': imgNew, 'totalImg': val['totalImg']}
+            return {'log': log_string, 'list': val['list'], 'draw': imgNew, 'totalImg': val['totalImg'], 'heatmap': val['heatmap']}
 
         # return log_string
         imgNew = Image.new("RGB", cfg_rslt, (0, 0, 0))
         imgNew = np.asarray(imgNew)
-        return {'log': log_string, 'list': [], 'draw': imgNew, 'totalImg': imgNew}
+        return {'log': log_string, 'list': [], 'draw': imgNew, 'totalImg': imgNew, 'heatmap': imgNew}
 
-    def emit_image(self, p, s1, s2, draw, total):
+    def emit_image(self, p, s1, s2, draw, total, heatmap):
         global cfg_rslt
         # draw = np.asarray(draw)
 
@@ -537,15 +566,21 @@ class SegmentationPredictor(DetectionPredictor):
         processed_img_data_total = base64.b64encode(
             frame_encoded_total).decode()
 
+        _, frame_encoded_heatmap = cv2.imencode(
+            ".jpg", heatmap, encode_param)
+        processed_img_data_heatmap = base64.b64encode(
+            frame_encoded_heatmap).decode()
+
         # Prepend the base64-encoded string with the data URL prefix
         b64_src = "data:image/jpg;base64,"
         processed_img_data = b64_src + processed_img_data
         processed_img_data_draw = b64_src + processed_img_data_draw
         processed_img_data_total = b64_src + processed_img_data_total
+        processed_img_data_heatmap = b64_src + processed_img_data_heatmap
 
         # Send the processed image back to the client
         emit("my image", {'data': processed_img_data,
-             'list': s2, 'log': s1, 'draw': processed_img_data_draw, 'totalImg': processed_img_data_total})
+             'list': s2, 'log': s1, 'draw': processed_img_data_draw, 'totalImg': processed_img_data_total, 'heatmap': processed_img_data_heatmap})
 
 
 class DetectionPredictor(BasePredictor):
@@ -600,7 +635,7 @@ class DetectionPredictor(BasePredictor):
         if len(det) == 0:
             imgNew = Image.new("RGB", cfg_rslt, (0, 0, 0))
             imgNew = np.asarray(imgNew)
-            return {'log': log_string, 'list': [], 'draw': imgNew, 'totalImg': imgNew}
+            return {'log': log_string, 'list': [], 'draw': imgNew, 'totalImg': imgNew, 'heatmap': imgNew}
         for c in det[:, 5].unique():
             n = (det[:, 5] == c).sum()  # detections per class
             log_string += f"{n} {self.model.names[int(c)]},"
@@ -628,14 +663,13 @@ class DetectionPredictor(BasePredictor):
             val = draw_boxes(im0, bbox_xyxy, self.model.names,
                              object_id, vid_cap, identities)
             imgNew = np.asarray(val['draw'])
-            return {'log': log_string, 'list': val['list'], 'draw': imgNew, 'totalImg': val['totalImg']}
+            return {'log': log_string, 'list': val['list'], 'draw': imgNew, 'totalImg': val['totalImg'], 'heatmap': val['heatmap']}
 
-        # print(log_string)
         imgNew = Image.new("RGB", cfg_rslt, (0, 0, 0))
         imgNew = np.asarray(imgNew)
-        return {'log': log_string, 'list': [], 'draw': imgNew, 'totalImg': imgNew}
+        return {'log': log_string, 'list': [], 'draw': imgNew, 'totalImg': imgNew, 'heatmap': imgNew}
 
-    def emit_image(self, p, s1, s2, draw, total):
+    def emit_image(self, p, s1, s2, draw, total, heatmap):
         global cfg_rslt
         # draw = np.asarray(draw)
 
@@ -658,24 +692,30 @@ class DetectionPredictor(BasePredictor):
         processed_img_data_total = base64.b64encode(
             frame_encoded_total).decode()
 
+        _, frame_encoded_heatmap = cv2.imencode(
+            ".jpg", heatmap, encode_param)
+        processed_img_data_heatmap = base64.b64encode(
+            frame_encoded_heatmap).decode()
+
         # Prepend the base64-encoded string with the data URL prefix
         b64_src = "data:image/jpg;base64,"
         processed_img_data = b64_src + processed_img_data
         processed_img_data_draw = b64_src + processed_img_data_draw
         processed_img_data_total = b64_src + processed_img_data_total
+        processed_img_data_heatmap = b64_src + processed_img_data_heatmap
 
         # Send the processed image back to the client
         emit("my image", {'data': processed_img_data,
-             'list': s2, 'log': s1, 'draw': processed_img_data_draw, 'totalImg': processed_img_data_total})
+             'list': s2, 'log': s1, 'draw': processed_img_data_draw, 'totalImg': processed_img_data_total, 'heatmap': processed_img_data_heatmap})
 
 
 # @hydra.main(version_base=None, config_path=str(DEFAULT_CONFIG.parent), config_name=DEFAULT_CONFIG.name)
 def predict(cfg):
-    global cfg_ppm, cfg_border, line, cfg_center, start_time, cfg_box_detect
+    global cfg_ppm, cfg_border, gates, cfg_center, start_time, cfg_box_detect
     cfg_ppm = cfg['ppm']
     cfg_border = cfg['border']
     cfg_center = cfg['center']
-    line = cfg['gate']
+    gates = cfg['gate']
     cfg_box_detect = cfg['box']
     start_time = cfg["startTime"]
 
