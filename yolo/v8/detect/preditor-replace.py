@@ -91,6 +91,7 @@ class BasePredictor:
         self.device = None
         self.dataset = None
         self.vid_path, self.vid_writer = None, None
+        self.vid_path2, self.vid_writer2 = None, None
         self.view_img = None
         self.annotator = None
         self.data_path = None
@@ -150,6 +151,7 @@ class BasePredictor:
             self.dataset = LoadImages(
                 source, imgsz=imgsz, stride=stride, auto=pt, vid_stride=self.args.vid_stride)
         self.vid_path, self.vid_writer = [None] * bs, [None] * bs
+        self.vid_path2, self.vid_writer2 = [None] * bs, [None] * bs
         model.warmup(
             imgsz=(1 if pt or model.triton else bs, 3, *imgsz))  # warmup
         self.model = model
@@ -204,8 +206,7 @@ class BasePredictor:
                     save_path = str(self.save_dir / p.name)
                     save_path2 = str(self.save_dir / (p.stem + "_heatmap" + p.suffix))
 
-                    self.save_preds(vid_cap, im0rs, i, save_path)
-                    self.save_preds(vid_cap, s2L['heatmap'], i, save_path2)
+                    self.save_preds(vid_cap, im0rs, s2L['heatmap'], i, save_path, save_path2)
 
                 s += s2L['log']
 
@@ -240,11 +241,12 @@ class BasePredictor:
         cv2.imshow(str(p), im0)
         cv2.waitKey(1)  # 1 millisecond
 
-    def save_preds(self, vid_cap, im0, idx, save_path):
+    def save_preds(self, vid_cap, im0, im02, idx, save_path, save_path2):
         # im0 = self.annotator.result()
         # save imgs
         if self.dataset.mode == 'image':
             cv2.imwrite(save_path, im0)
+            cv2.imwrite(save_path2, im02)
         else:  # 'video' or 'stream'
             if self.vid_path[idx] != save_path:  # new video
                 self.vid_path[idx] = save_path
@@ -262,6 +264,23 @@ class BasePredictor:
                 self.vid_writer[idx] = cv2.VideoWriter(
                     save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
             self.vid_writer[idx].write(im0)
+
+            if self.vid_path2[idx] != save_path2:  # new video
+                self.vid_path2[idx] = save_path2
+                if isinstance(self.vid_writer2[idx], cv2.VideoWriter):
+                    # release previous video writer
+                    self.vid_writer2[idx].release()
+                if vid_cap:  # video
+                    fps = vid_cap.get(cv2.CAP_PROP_FPS)
+                    w = int(vid_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                    h = int(vid_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                else:  # stream
+                    fps, w, h = 30, im02.shape[1], im02.shape[0]
+                # force *.mp4 suffix on results videos
+                save_path2 = str(Path(save_path2).with_suffix('.mp4'))
+                self.vid_writer2[idx] = cv2.VideoWriter(
+                    save_path2, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
+            self.vid_writer2[idx].write(im02)
 
     def run_callbacks(self, event: str):
         for callback in self.callbacks.get(event, []):
