@@ -33,7 +33,8 @@ deepsort = None
 object_counter = {}
 object_counter1 = {}
 # gates = [(100, 500), (1050, 500)]
-gates = [402, 470, 606, 559]
+gates = []
+trapeziums = []
 speed_line_queue = {}
 cfg_ppm = 8
 cfg_border = True
@@ -201,6 +202,18 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
         end_point = (int(i[1]['x']), int(i[1]['y']))
         cv2.line(img, start_point, end_point, (0, 0, 255), 1)
 
+    # draw box
+    for i in trapeziums:
+        point1 = (int(i[0]['x']), int(i[0]['y']))
+        point2 = (int(i[1]['x']), int(i[1]['y']))
+        point3 = (int(i[2]['x']), int(i[2]['y']))
+        point4 = (int(i[3]['x']), int(i[3]['y']))
+        points = np.array([point1, point2,
+                           point3, point4], dtype=np.int32)
+        points = points.reshape((-1, 1, 2))
+        cv2.polylines(img, [points], isClosed=True,
+                      color=(255, 0, 0), thickness=1)
+
     # remove tracked point from buffer if object is lost
     for key in list(data_deque):
         if key not in identities:
@@ -212,7 +225,6 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
         x2 += offset[0]
         y1 += offset[1]
         y2 += offset[1]
-        global_img_array[y1:y2, x1:x2] += 1
 
         # code to find center of bottom edge
         if (cfg_center == 'center'):
@@ -225,6 +237,12 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
             center = (int((x2)), int((y2+y1)/2))
         else:
             center = (int((x2+x1)/2), int(y2))
+
+        # check_point_in_rectangle
+        if ((len(trapeziums) > 0) & (point_out_rectangle(center))):
+            continue
+
+        global_img_array[y1:y2, x1:x2] += 1
 
         # get ID of object
         id = int(identities[i]) if identities is not None else 0
@@ -429,6 +447,39 @@ def add_grid_lines(draw, height, width):
 
     return draw
 
+
+def point_out_rectangle(point):
+    arr = []
+    x, y = point
+    for i in trapeziums:
+        point1 = (int(i[0]['x']), int(i[0]['y']))
+        point2 = (int(i[1]['x']), int(i[1]['y']))
+        point3 = (int(i[2]['x']), int(i[2]['y']))
+        point4 = (int(i[3]['x']), int(i[3]['y']))
+
+        x1, y1 = point1
+        x2, y2 = point2
+        x3, y3 = point3
+        x4, y4 = point4
+
+        if (
+            x < min(x1, x2, x3, x4) or
+            x > max(x1, x2, x3, x4) or
+            y < min(y1, y2, y3, y4) or
+            y > max(y1, y2, y3, y4)
+            # (x - x1) * (y2 - y1) - (y - y1) * (x2 - x1) < 0 or
+            # (x - x2) * (y3 - y2) - (y - y2) * (x3 - x2) < 0 or
+            # (x - x3) * (y4 - y3) - (y - y3) * (x4 - x3) < 0 or
+            # (x - x4) * (y1 - y4) - (y - y4) * (x1 - x4) < 0
+        ):
+            arr.append(False)
+        else:
+            arr.append(True)
+
+    result = any(arr)
+    result = not result
+    return result
+
 ##########################################################################################
 
 
@@ -457,6 +508,45 @@ class SegmentationPredictor(DetectionPredictor):
                     proto[i], pred[:, 6:], pred[:, :4], img.shape[2:], upsample=True))  # HWC
                 pred[:, :4] = ops.scale_boxes(
                     img.shape[2:], pred[:, :4], shape).round()
+
+        return (p, masks)
+
+    def postprocess_new(self, preds, img, orig_img):
+        masks = []
+        # TODO: filter by classes
+        p = ops.non_max_suppression(preds[0],
+                                    self.args.conf,
+                                    self.args.iou,
+                                    agnostic=self.args.agnostic_nms,
+                                    max_det=self.args.max_det,
+                                    nm=32)
+        proto = preds[1][-1]
+        for i, pred in enumerate(p):
+            shape = orig_img[i].shape if self.webcam else orig_img.shape
+            if not len(pred):
+                continue
+            if self.args.retina_masks:
+                pred[:, :4] = ops.scale_boxes(
+                    img.shape[2:], pred[:, :4], shape).round()
+                masks_in_rect = ops.process_mask_native(
+                    proto[i], pred[:, 6:], pred[:, :4], shape[:2])  # HWC
+            else:
+                masks_in_rect = ops.process_mask(
+                    proto[i], pred[:, 6:], pred[:, :4], img.shape[2:], upsample=True)  # HWC
+                pred[:, :4] = ops.scale_boxes(
+                    img.shape[2:], pred[:, :4], shape).round()
+
+            # Check if the mask falls within the specified rectangle
+            x1, y1, x2, y2 = (11, 227, 585, 423)
+            mask_x_center = (pred[:, 0] + pred[:, 2]) / 2
+            mask_y_center = (pred[:, 1] + pred[:, 3]) / 2
+            mask_in_rect = (
+                (mask_x_center >= x1) & (mask_x_center <= x2) &
+                (mask_y_center >= y1) & (mask_y_center <= y2)
+            )
+
+            # Append masks that are within the rectangle
+            masks.append(masks_in_rect[mask_in_rect])
 
         return (p, masks)
 
@@ -504,6 +594,7 @@ class SegmentationPredictor(DetectionPredictor):
             log_string += f"{n} {self.model.names[int(c)]}{'s' * (n > 1)}, "
 
         # Mask plotting
+        # print(len(mask), len([colors(x, True) for x in det[:, 5]]))
         self.annotator.masks(
             mask,
             colors=[colors(x, True) for x in det[:, 5]],
@@ -711,11 +802,12 @@ class DetectionPredictor(BasePredictor):
 
 # @hydra.main(version_base=None, config_path=str(DEFAULT_CONFIG.parent), config_name=DEFAULT_CONFIG.name)
 def predict(cfg):
-    global cfg_ppm, cfg_border, gates, cfg_center, start_time, cfg_box_detect
+    global trapeziums, cfg_ppm, cfg_border, gates, cfg_center, start_time, cfg_box_detect
     cfg_ppm = cfg['ppm']
     cfg_border = cfg['border']
     cfg_center = cfg['center']
     gates = cfg['gate']
+    trapeziums = cfg['box']
     cfg_box_detect = cfg['box']
     start_time = cfg["startTime"]
 
