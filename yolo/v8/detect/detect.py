@@ -715,14 +715,14 @@ class DetectionPredictor(BasePredictor):
             frame = getattr(self.dataset, 'frame', 0)
 
         self.data_path = p
-        save_path = str(self.save_dir / p.name)  # im.jpg
+        # save_path = str(self.save_dir / p.name)  # im.jpg
         self.txt_path = str(self.save_dir / 'labels' / p.stem) + \
             ('' if self.dataset.mode == 'image' else f'_{frame}')
         # log_string += '%gx%g ' % im.shape[2:]  # print string
         self.annotator = self.get_annotator(im0)
 
         det = preds[idx]
-        all_outputs.append(det)
+        # all_outputs.append(det)
         if len(det) == 0:
             imgNew = Image.new("RGB", cfg_rslt, (0, 0, 0))
             imgNew = np.asarray(imgNew)
@@ -818,8 +818,11 @@ def predict(cfg):
     # cfg.source = cfg.source if cfg.source is not None else ROOT / "assets"
     cfg['imgsz'] = check_imgsz(cfg['imgsz'], min_dim=2)
 
-    # predictor = DetectionPredictor(cfg)
-    predictor = SegmentationPredictor(cfg)
+    if (cfg['seg']):
+        predictor = SegmentationPredictor(cfg)
+    else:
+        predictor = DetectionPredictor(cfg)
+
     predictor()
 
 

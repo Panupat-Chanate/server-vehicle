@@ -33,7 +33,12 @@ def test_message(message):
 
 @socketio.on("my image")
 def receive_image(message):
-    predict(message['data'])
+    from threading import Thread
+
+    # Create a separate thread to run the emit_in_loop function
+    loop_thread = Thread(target=predict(message['data']))
+    loop_thread.daemon = True
+    loop_thread.start()
 
 
 @socketio.on("first image")
