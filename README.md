@@ -40,3 +40,5 @@ python tracking_vehicle_counting_speed.py model=yolov8n.pt source="https://camer
 python server.py model=yolov8n.pt source="test.mp4" show=True
 python detect.py model=yolov8n.pt source="test.mp4" show=True
 ```
+
+https://drive.google.com/drive/folders/1g940apq0FWuvD2ep7761Ajfp3YDqvb22?usp=drive_link
