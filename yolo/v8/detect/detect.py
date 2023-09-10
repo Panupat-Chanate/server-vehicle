@@ -32,18 +32,17 @@ data_deque = {}
 deepsort = None
 object_counter = {}
 object_counter1 = {}
-# gates = [(100, 500), (1050, 500)]
-gates = []
-trapeziums = []
+cfg_gates = []
+cfg_trapeziums = []
+cfg_lanes = []
 speed_line_queue = {}
 cfg_ppm = 8
 cfg_border = True
 data_deque_unlimit = {}
 motorcycle_id = []
-data_deque_gate = {}
+# data_deque_gate = {}
 cfg_rslt = (640, 360)
 cfg_center = "bottom"
-cfg_box_detect = None
 heatmap_count = 0
 global_img_array = None
 
@@ -51,7 +50,7 @@ global_img_array = None
 number_row = 0
 file_name = 0
 max_row = 25000000 - 1
-start_time = int(time.time() * 1000)
+cfg_start_time = int(time.time() * 1000)
 calc_timestamps = 0.0
 cur_timestamp = None
 
@@ -181,7 +180,7 @@ def get_direction(point1, point2):
 
 
 def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0, 0)):
-    global global_img_array, heatmap_count, cur_timestamp, number_row, max_row, file_name, calc_timestamps, data_deque_unlimit, data_deque_gate, cfg_center
+    global global_img_array, heatmap_count, cur_timestamp, number_row, max_row, file_name, calc_timestamps, data_deque_unlimit, cfg_center
 
     heatmap_count += 1
     img2 = img.copy()
@@ -197,13 +196,13 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
     vhc_list = []
 
     # draw gate
-    for i in gates:
+    for i in cfg_gates:
         start_point = (int(i[0]['x']), int(i[0]['y']))
         end_point = (int(i[1]['x']), int(i[1]['y']))
         cv2.line(img, start_point, end_point, (0, 0, 255), 1)
 
     # draw box
-    for i in trapeziums:
+    for i in cfg_trapeziums:
         point1 = (int(i[0]['x']), int(i[0]['y']))
         point2 = (int(i[1]['x']), int(i[1]['y']))
         point3 = (int(i[2]['x']), int(i[2]['y']))
@@ -239,7 +238,7 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
             center = (int((x2+x1)/2), int(y2))
 
         # check_point_in_rectangle
-        if ((len(trapeziums) > 0) & (point_out_rectangle(center))):
+        if ((len(cfg_trapeziums) > 0) & (point_out_rectangle(center))):
             continue
 
         global_img_array[y1:y2, x1:x2] += 1
@@ -252,7 +251,7 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
             data_deque[id] = deque(maxlen=64)
             data_deque_unlimit[id] = deque()
             speed_line_queue[id] = []
-            data_deque_gate[id] = []
+            # data_deque_gate[id] = None
         color = compute_color_for_labels(object_id[i])
         obj_name = names[object_id[i]]
         label = "ID:" + '{}{:d}'.format("", id) + ":" + '%s' % (obj_name)
@@ -265,19 +264,22 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
         # add center to buffer
         data_deque[id].appendleft(center)
         data_deque_unlimit[id].appendleft(center)
+        cur_gate = None
+
         if len(data_deque[id]) >= 2:
-            direction = get_direction(data_deque[id][0], data_deque[id][1])
+            # direction = get_direction(data_deque[id][0], data_deque[id][1])
             object_speed = estimatespeed(data_deque[id][1], data_deque[id][0])
             speed_line_queue[id].append(object_speed)
 
-            for i, gate in enumerate(gates):
+            for i, gate in enumerate(cfg_gates):
                 start_point = (int(gate[0]['x']), int(gate[0]['y']))
                 end_point = (int(gate[1]['x']), int(gate[1]['y']))
 
                 if intersect(data_deque[id][0], data_deque[id][1], start_point, end_point):
                     cv2.line(img, start_point, end_point, (255, 255, 255), 3)
 
-                    data_deque_gate[id].append(i)
+                    cur_gate = i
+                    # data_deque_gate[id] = i
 
             # if "South" in direction:
             #     if obj_name not in object_counter:
@@ -294,7 +296,7 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
         if (number_row % max_row == 0):
             gen_csv_header()
         if (cur_timestamp == None):
-            cur_timestamp = start_time
+            cur_timestamp = cfg_start_time
 
         number_row += 1
 
@@ -303,40 +305,48 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
             fps = vid_cap.get(cv2.CAP_PROP_FPS)
             calc_timestamp = calc_timestamps + 1000 / fps
             cur_timestamp = int(
-                start_time + abs(cap_timestamp - calc_timestamp))
+                cfg_start_time + abs(cap_timestamp - calc_timestamp))
         except:
             pass
 
-        in_gate = None
-        out_gate = None
+        # in_gate = None
+        # out_gate = None
 
-        if (len(data_deque_gate[id]) == 1):
-            in_gate = data_deque_gate[id][0]
-        elif (len(data_deque_gate[id]) == 2):
-            in_gate = data_deque_gate[id][0]
-            out_gate = data_deque_gate[id][1]
+        # if (len(data_deque_gate[id]) == 1):
+        #     in_gate = data_deque_gate[id][0]
+        # elif (len(data_deque_gate[id]) == 2):
+        #     in_gate = data_deque_gate[id][0]
+        #     out_gate = data_deque_gate[id][1]
+
+        # cur_gate = data_deque_gate[id]
+        cur_lane = point_find_lane(center)
 
         try:
             label = label + " speed:" + \
                 str(sum(speed_line_queue[id]) //
                     len(speed_line_queue[id])) + "km/h"
 
+            label_speed = str(sum(speed_line_queue[id]) //
+                              len(speed_line_queue[id])) + "km/h"
+
             # gen body csv
-            data_csv = [number_row, id, obj_name, str(sum(speed_line_queue[id]) //
-                                                      len(speed_line_queue[id])) + "km/h", center[0], center[1], cur_timestamp, in_gate, out_gate]
+            data_csv = [number_row, id, obj_name, label_speed,
+                        center[0], center[1], cur_timestamp, cur_gate, cur_lane]
             with open('../../../csv/' + str(file_name) + '.csv', mode='a', encoding='UTF8') as f:
                 writer = csv.writer(f)
                 writer.writerow(data_csv)
 
-            vhc_list.append({'id': id, 'type': obj_name, 'speed': str(sum(speed_line_queue[id]) //
-                                                                      len(speed_line_queue[id])) + "km/h", 'gate': data_deque_gate[id]})
+            vhc_list.append({'id': id, 'type': obj_name})
         except:
             # gen body csv
             data_csv = [number_row, id, obj_name, None,
-                        center[0], center[1], cur_timestamp, None, None]
+                        center[0], center[1], cur_timestamp, cur_gate, cur_lane]
             with open('../../../csv/' + str(file_name) + '.csv', mode='a', encoding='UTF8') as f:
                 writer = csv.writer(f)
                 writer.writerow(data_csv)
+
+            vhc_list.append({'id': id, 'type': obj_name})
+
             pass
 
         UI_box(box, img, label=label, color=color, line_thickness=2)
@@ -412,9 +422,8 @@ def gen_csv_header():
     global number_row, max_row, file_name
 
     file_name += 1
-    header = ['number', 'id', 'name', 'speed', 'positionX', 'positionY', 'timestamp', 'in', 'out',
-              'left_id', 'front_id', 'right_id', 'back_id',
-              'left_distance', 'front_distance', 'right_distance', 'back_distance']
+    header = ['number', 'id', 'name', 'speed', 'positionX',
+              'positionY', 'timestamp', 'gate', 'lane']
     with open('../../../csv/' + str(file_name) + '.csv', 'w', encoding='UTF8', newline='') as f:
         writer = csv.writer(f)
         writer.writerow(header)
@@ -451,7 +460,7 @@ def add_grid_lines(draw, height, width):
 def point_out_rectangle(point):
     arr = []
     x, y = point
-    for i in trapeziums:
+    for i in cfg_trapeziums:
         point1 = (int(i[0]['x']), int(i[0]['y']))
         point2 = (int(i[1]['x']), int(i[1]['y']))
         point3 = (int(i[2]['x']), int(i[2]['y']))
@@ -479,6 +488,30 @@ def point_out_rectangle(point):
     result = any(arr)
     result = not result
     return result
+
+
+def point_find_lane(point):
+    x, y = point
+    for i, lane in enumerate(cfg_lanes):
+        point1 = (int(lane[0]['x']), int(lane[0]['y']))
+        point2 = (int(lane[1]['x']), int(lane[1]['y']))
+        point3 = (int(lane[2]['x']), int(lane[2]['y']))
+        point4 = (int(lane[3]['x']), int(lane[3]['y']))
+
+        x1, y1 = point1
+        x2, y2 = point2
+        x3, y3 = point3
+        x4, y4 = point4
+
+        if (not (
+            x < min(x1, x2, x3, x4) or
+            x > max(x1, x2, x3, x4) or
+            y < min(y1, y2, y3, y4) or
+            y > max(y1, y2, y3, y4)
+        )):
+            return i
+
+    return None
 
 ##########################################################################################
 
@@ -802,14 +835,14 @@ class DetectionPredictor(BasePredictor):
 
 # @hydra.main(version_base=None, config_path=str(DEFAULT_CONFIG.parent), config_name=DEFAULT_CONFIG.name)
 def predict(cfg):
-    global trapeziums, cfg_ppm, cfg_border, gates, cfg_center, start_time, cfg_box_detect
+    global cfg_trapeziums, cfg_lanes, cfg_ppm, cfg_border, cfg_gates, cfg_center, cfg_start_time
     cfg_ppm = cfg['ppm']
     cfg_border = cfg['border']
     cfg_center = cfg['center']
-    gates = cfg['gate']
-    trapeziums = cfg['box']
-    cfg_box_detect = cfg['box']
-    start_time = cfg["startTime"]
+    cfg_gates = cfg['gate']
+    cfg_trapeziums = cfg['box']
+    cfg_lanes = cfg['lane']
+    cfg_start_time = cfg["startTime"]
 
     init_tracker()
 
