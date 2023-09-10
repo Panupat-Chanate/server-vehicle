@@ -25,6 +25,7 @@ from collections import deque
 
 from flask_socketio import emit
 from PIL import Image, ImageDraw, ImageTk
+from vehicle_distances import process_distances
 
 
 palette = (2 ** 11 - 1, 2 ** 15 - 1, 2 ** 20 - 1)
@@ -53,6 +54,11 @@ max_row = 25000000 - 1
 cfg_start_time = int(time.time() * 1000)
 calc_timestamps = 0.0
 cur_timestamp = None
+
+center_position = []
+distance_header = []
+header = ['number', 'id', 'name', 'speed', 'positionX',
+          'positionY', 'timestamp', 'gate', 'lane']
 
 
 def xyxy_to_xywh(*xyxy):
@@ -261,6 +267,29 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
             if found is None:
                 motorcycle_id.append(id)
 
+        center_detials = {
+            "id": id,
+            "class": obj_name,
+            "top-l": (int(x1), int(y1)),
+            "top-c": (int((x2+x1)/2), int(y1)),
+            "top-r": (int(x2), int(y1)),
+            "bottom-l": (int(x1), int(y2)),
+            "bottom-c": (int((x2+x1)/2), int(y2)),
+            "bottom-r": (int(x2), int(y2)),
+            "left": (int((x1)), int((y2+y1)/2)),
+            "right": (int((x2)), int((y2+y1)/2)),
+        }
+
+        existing_dict = next(
+            (d for d in center_position if d['id'] == center_detials['id']), None)
+
+        if existing_dict:
+            existing_dict.update(center_detials)
+        else:
+            center_position.append(center_detials)
+            distance_header.append(id)
+            update_csv_header()
+
         # add center to buffer
         data_deque[id].appendleft(center)
         data_deque_unlimit[id].appendleft(center)
@@ -322,6 +351,18 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
         cur_lane = point_find_lane(center)
 
         try:
+            distance = process_distances(
+                sorted(center_position, key=lambda x: x['id']))
+            found_dicts = list(
+                filter(lambda item: str(item['id']) == str(id), distance))
+
+            distn = found_dicts[0]['distances_to_other_ids']
+            distn_row = [distn.get(destination_id, None)
+                         for destination_id in distance_header]
+            ppm = int(cfg_ppm)
+            pixel_m = [str(round(d / ppm, 3)) +
+                       " m." if d is not None else None for d in distn_row]
+
             label = label + " speed:" + \
                 str(sum(speed_line_queue[id]) //
                     len(speed_line_queue[id])) + "km/h"
@@ -331,7 +372,7 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
 
             # gen body csv
             data_csv = [number_row, id, obj_name, label_speed,
-                        center[0], center[1], cur_timestamp, cur_gate, cur_lane]
+                        center[0], center[1], cur_timestamp, cur_gate, cur_lane] + pixel_m
             with open('../../../csv/' + str(file_name) + '.csv', mode='a', encoding='UTF8') as f:
                 writer = csv.writer(f)
                 writer.writerow(data_csv)
@@ -422,8 +463,7 @@ def gen_csv_header():
     global number_row, max_row, file_name
 
     file_name += 1
-    header = ['number', 'id', 'name', 'speed', 'positionX',
-              'positionY', 'timestamp', 'gate', 'lane']
+
     with open('../../../csv/' + str(file_name) + '.csv', 'w', encoding='UTF8', newline='') as f:
         writer = csv.writer(f)
         writer.writerow(header)
@@ -513,6 +553,20 @@ def point_find_lane(point):
 
     return None
 
+
+def update_csv_header():
+    try:
+        # print(header + distance_header)
+        with open('../../../csv/' + str(file_name) + '.csv', 'r', encoding='UTF8', newline='') as f:
+            reader = csv.reader(f)
+            data_csv = list(reader)
+            data_csv[0] = header + distance_header
+
+        with open('../../../csv/' + str(file_name) + '.csv', 'w', encoding='UTF8', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerows(data_csv)
+    except:
+        print("No files")
 ##########################################################################################
 
 
