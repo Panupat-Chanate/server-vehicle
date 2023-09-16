@@ -60,7 +60,7 @@ cur_timestamp = None
 center_position = []
 distance_header = []
 header = ['number', 'id', 'name', 'speed', 'positionX',
-          'positionY', 'timestamp', 'gate', 'lane']
+          'positionY', 'timestamp', 'datetime', 'gate', 'lane']
 
 
 def xyxy_to_xywh(*xyxy):
@@ -316,9 +316,9 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
             pass
 
         dt_object = datetime.datetime.fromtimestamp(cur_timestamp / 1000.0)
+        formatted_date_time = dt_object.strftime("%Y-%m-%d %H:%M:%S:%f")[:-3]
         seconds = round(dt_object.time().second +
                         dt_object.time().microsecond / 1000000, 3)
-        # print(cur_timestamp, seconds)
 
         if len(data_deque[id]) >= 2:
             # direction = get_direction(data_deque[id][0], data_deque[id][1])
@@ -346,7 +346,6 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
             distn = found_dicts[0]['distances_to_other_ids']
             distn_row = [distn.get(destination_id, None)
                          for destination_id in distance_header]
-            # ppm = int(cfg_ppm)
             # pixel_m = [str(round(d / ppm, 3)) +
             #            " m." if d is not None else None for d in distn_row]
             pixel_m = [str(round(pixels_to_meters(d, cfg_pixel_to_meter_ratio))) +
@@ -360,7 +359,7 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
 
             # gen body csv
             data_csv = [number_row, id, obj_name, label_speed,
-                        center[0], center[1], cur_timestamp, cur_gate, cur_lane] + pixel_m
+                        center[0], center[1], cur_timestamp, formatted_date_time, cur_gate, cur_lane] + pixel_m
             with open('../../../csv/' + str(file_name) + '.csv', mode='a', encoding='UTF8') as f:
                 writer = csv.writer(f)
                 writer.writerow(data_csv)
@@ -369,7 +368,7 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
         except:
             # gen body csv
             data_csv = [number_row, id, obj_name, None,
-                        center[0], center[1], cur_timestamp, cur_gate, cur_lane]
+                        center[0], center[1], cur_timestamp, formatted_date_time, cur_gate, cur_lane]
             with open('../../../csv/' + str(file_name) + '.csv', mode='a', encoding='UTF8') as f:
                 writer = csv.writer(f)
                 writer.writerow(data_csv)
