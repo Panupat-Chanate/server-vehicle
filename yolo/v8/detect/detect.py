@@ -12,6 +12,7 @@ import cv2
 import torch
 import torch.backends.cudnn as cudnn
 from numpy import random
+import datetime
 
 from ultralytics.yolo.v8.detect.predict import DetectionPredictor
 from ultralytics.yolo.engine.predictor import BasePredictor
@@ -38,6 +39,7 @@ cfg_trapeziums = []
 cfg_lanes = []
 speed_line_queue = {}
 cfg_ppm = 8
+cfg_pixel_to_meter_ratio = 3 / 80
 cfg_border = True
 data_deque_unlimit = {}
 motorcycle_id = []
@@ -51,7 +53,7 @@ global_img_array = None
 number_row = 0
 file_name = 0
 max_row = 25000000 - 1
-cfg_start_time = int(time.time() * 1000)
+cfg_start_time = None
 calc_timestamps = 0.0
 cur_timestamp = None
 
@@ -256,7 +258,7 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
         if id not in data_deque:
             data_deque[id] = deque(maxlen=64)
             data_deque_unlimit[id] = deque()
-            speed_line_queue[id] = []
+            # speed_line_queue[id] = []
             # data_deque_gate[id] = None
         color = compute_color_for_labels(object_id[i])
         obj_name = names[object_id[i]]
@@ -266,6 +268,10 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
             found = next((mid for mid in motorcycle_id if mid == id), None)
             if found is None:
                 motorcycle_id.append(id)
+
+        # gen header csv
+        if (number_row % max_row == 0):
+            gen_csv_header()
 
         center_detials = {
             "id": id,
@@ -294,40 +300,11 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
         data_deque[id].appendleft(center)
         data_deque_unlimit[id].appendleft(center)
         cur_gate = None
+        object_speed = 0
+        number_row += 1
 
-        if len(data_deque[id]) >= 2:
-            # direction = get_direction(data_deque[id][0], data_deque[id][1])
-            object_speed = estimatespeed(data_deque[id][1], data_deque[id][0])
-            speed_line_queue[id].append(object_speed)
-
-            for i, gate in enumerate(cfg_gates):
-                start_point = (int(gate[0]['x']), int(gate[0]['y']))
-                end_point = (int(gate[1]['x']), int(gate[1]['y']))
-
-                if intersect(data_deque[id][0], data_deque[id][1], start_point, end_point):
-                    cv2.line(img, start_point, end_point, (255, 255, 255), 3)
-
-                    cur_gate = i
-                    # data_deque_gate[id] = i
-
-            # if "South" in direction:
-            #     if obj_name not in object_counter:
-            #         object_counter[obj_name] = 1
-            #     else:
-            #         object_counter[obj_name] += 1
-            # if "North" in direction:
-            #     if obj_name not in object_counter1:
-            #         object_counter1[obj_name] = 1
-            #     else:
-            #         object_counter1[obj_name] += 1
-
-        # gen header csv
-        if (number_row % max_row == 0):
-            gen_csv_header()
         if (cur_timestamp == None):
             cur_timestamp = cfg_start_time
-
-        number_row += 1
 
         try:
             cap_timestamp = vid_cap.get(cv2.CAP_PROP_POS_MSEC)
@@ -338,16 +315,26 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
         except:
             pass
 
-        # in_gate = None
-        # out_gate = None
+        dt_object = datetime.datetime.fromtimestamp(cur_timestamp / 1000.0)
+        seconds = round(dt_object.time().second +
+                        dt_object.time().microsecond / 1000000, 3)
+        # print(cur_timestamp, seconds)
 
-        # if (len(data_deque_gate[id]) == 1):
-        #     in_gate = data_deque_gate[id][0]
-        # elif (len(data_deque_gate[id]) == 2):
-        #     in_gate = data_deque_gate[id][0]
-        #     out_gate = data_deque_gate[id][1]
+        if len(data_deque[id]) >= 2:
+            # direction = get_direction(data_deque[id][0], data_deque[id][1])
+            object_speed = estimatespeed(
+                data_deque[id][1], data_deque[id][0], seconds)
+            # speed_line_queue[id].append(object_speed)
 
-        # cur_gate = data_deque_gate[id]
+            for i, gate in enumerate(cfg_gates):
+                start_point = (int(gate[0]['x']), int(gate[0]['y']))
+                end_point = (int(gate[1]['x']), int(gate[1]['y']))
+
+                if intersect(data_deque[id][0], data_deque[id][1], start_point, end_point):
+                    cv2.line(img, start_point, end_point, (255, 255, 255), 3)
+
+                    cur_gate = i
+
         cur_lane = point_find_lane(center)
 
         try:
@@ -359,16 +346,17 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
             distn = found_dicts[0]['distances_to_other_ids']
             distn_row = [distn.get(destination_id, None)
                          for destination_id in distance_header]
-            ppm = int(cfg_ppm)
-            pixel_m = [str(round(d / ppm, 3)) +
+            # ppm = int(cfg_ppm)
+            # pixel_m = [str(round(d / ppm, 3)) +
+            #            " m." if d is not None else None for d in distn_row]
+            pixel_m = [str(round(pixels_to_meters(d, cfg_pixel_to_meter_ratio))) +
                        " m." if d is not None else None for d in distn_row]
 
-            label = label + " speed:" + \
-                str(sum(speed_line_queue[id]) //
-                    len(speed_line_queue[id])) + "km/h"
+            label = label + " speed:" + str(object_speed) + "km/h"
+            label_speed = object_speed
 
-            label_speed = str(sum(speed_line_queue[id]) //
-                              len(speed_line_queue[id])) + "km/h"
+            # label_speed = str(sum(speed_line_queue[id]) //
+            #                   len(speed_line_queue[id])) + "km/h"
 
             # gen body csv
             data_csv = [number_row, id, obj_name, label_speed,
@@ -403,7 +391,6 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
             cv2.line(img, data_deque[id][i - 1],
                      data_deque[id][i], color, thickness)
 
-        # cv2.circle(img, data_deque[id][0], 5, color, -1)
         draw.ellipse([int((x2+x1) / 2 - 10),
                       int((y2+y2)/2 - 10),
                       int((x2+x1) / 2 + 10),
@@ -463,35 +450,40 @@ def gen_csv_header():
     global number_row, max_row, file_name
 
     file_name += 1
+    header_csv = header + distance_header
 
     with open('../../../csv/' + str(file_name) + '.csv', 'w', encoding='UTF8', newline='') as f:
         writer = csv.writer(f)
-        writer.writerow(header)
+        writer.writerow(header_csv)
 
 
-def estimatespeed(Location1, Location2):
+def pixels_to_meters(pixels, pixel_to_meter_ratio):
+    meters = pixels * pixel_to_meter_ratio
+    return meters
+
+
+def estimatespeed(Location1, Location2, seconds):
     # Euclidean Distance Formula
     d_pixel = math.sqrt(math.pow(
         Location2[0] - Location1[0], 2) + math.pow(Location2[1] - Location1[1], 2))
-    # defining thr pixels per meter
-    ppm = int(cfg_ppm)
-    d_meters = d_pixel/ppm
-    time_constant = 15*3.6
-    # distance = speed/time
+
+    d_meters = pixels_to_meters(d_pixel, cfg_pixel_to_meter_ratio)
+    # d_meters = d_pixel/26.667
+    time_constant = 15 * 3.6
+    # v_mps = d_meters / seconds
+    # speed = v_mps * 3.6
     speed = d_meters * time_constant
 
     return int(speed)
 
 
 def add_grid_lines(draw, height, width):
-    ppm = int(int(cfg_ppm) * 2)
-
     # Vertical lines
-    for x in range(0, width + 1, ppm):
+    for x in range(0, width + 1, 24):
         draw.line([(x, 0), (x, height)], fill="gray")
 
     # Horizontal lines
-    for y in range(0, height + 1, ppm):
+    for y in range(0, height + 1, 24):
         draw.line([(0, y), (width, y)], fill="gray")
 
     return draw
@@ -566,7 +558,7 @@ def update_csv_header():
             writer = csv.writer(f)
             writer.writerows(data_csv)
     except:
-        print("No files")
+        gen_csv_header()
 ##########################################################################################
 
 
@@ -889,14 +881,14 @@ class DetectionPredictor(BasePredictor):
 
 # @hydra.main(version_base=None, config_path=str(DEFAULT_CONFIG.parent), config_name=DEFAULT_CONFIG.name)
 def predict(cfg):
-    global cfg_trapeziums, cfg_lanes, cfg_ppm, cfg_border, cfg_gates, cfg_center, cfg_start_time
-    cfg_ppm = cfg['ppm']
+    global cfg_trapeziums, cfg_lanes, cfg_pixel_to_meter_ratio, cfg_border, cfg_gates, cfg_center, cfg_start_time
+    cfg_pixel_to_meter_ratio = cfg['pixel_to_meter_ratio']
     cfg_border = cfg['border']
     cfg_center = cfg['center']
     cfg_gates = cfg['gate']
     cfg_trapeziums = cfg['box']
     cfg_lanes = cfg['lane']
-    cfg_start_time = cfg["startTime"]
+    cfg_start_time = cfg["start_time"]
 
     init_tracker()
 
