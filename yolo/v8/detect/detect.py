@@ -13,6 +13,9 @@ import torch
 import torch.backends.cudnn as cudnn
 from numpy import random
 import datetime
+import eventlet
+# import os
+# os.environ['KMP_DUPLICATE_LIB_OK']='True'
 
 from ultralytics.yolo.v8.detect.predict import DetectionPredictor
 from ultralytics.yolo.engine.predictor import BasePredictor
@@ -24,11 +27,11 @@ from deep_sort_pytorch.utils.parser import get_config
 from deep_sort_pytorch.deep_sort import DeepSort
 from collections import deque
 
-from flask_socketio import emit
+# from flask_socketio import emit
 from PIL import Image, ImageDraw, ImageTk
 from vehicle_distances import process_distances
 
-
+socketio = None
 palette = (2 ** 11 - 1, 2 ** 15 - 1, 2 ** 20 - 1)
 data_deque = {}
 deepsort = None
@@ -288,10 +291,11 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
 
         existing_dict = next(
             (d for d in center_position if d['id'] == center_detials['id']), None)
-
+        
         if existing_dict:
             existing_dict.update(center_detials)
         else:
+            # if center_detials['id'] in identities:
             center_position.append(center_detials)
             distance_header.append(id)
             update_csv_header()
@@ -338,24 +342,22 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
         cur_lane = point_find_lane(center)
 
         try:
+            for item in center_position:
+                if item['id'] not in identities:
+                    center_position.remove(item)
+                    
             distance = process_distances(
                 sorted(center_position, key=lambda x: x['id']))
-            found_dicts = list(
-                filter(lambda item: str(item['id']) == str(id), distance))
-
+            found_dicts = [item for item in distance if str(item['id']) == str(id)]
             distn = found_dicts[0]['distances_to_other_ids']
             distn_row = [distn.get(destination_id, None)
                          for destination_id in distance_header]
-            # pixel_m = [str(round(d / ppm, 3)) +
-            #            " m." if d is not None else None for d in distn_row]
+
             pixel_m = [str(round(pixels_to_meters(d, cfg_pixel_to_meter_ratio))) +
                        " m." if d is not None else None for d in distn_row]
 
             label = label + " speed:" + str(object_speed) + "km/h"
             label_speed = object_speed
-
-            # label_speed = str(sum(speed_line_queue[id]) //
-            #                   len(speed_line_queue[id])) + "km/h"
 
             # gen body csv
             data_csv = [number_row, id, obj_name, label_speed,
@@ -451,7 +453,7 @@ def gen_csv_header():
     file_name += 1
     header_csv = header + distance_header
 
-    with open('../../../csv/' + str(file_name) + '.csv', 'w', encoding='UTF8', newline='') as f:
+    with open('../../../csv/header_' + str(file_name) + '.csv', 'w', encoding='UTF8', newline='') as f:
         writer = csv.writer(f)
         writer.writerow(header_csv)
 
@@ -548,12 +550,12 @@ def point_find_lane(point):
 def update_csv_header():
     try:
         # print(header + distance_header)
-        with open('../../../csv/' + str(file_name) + '.csv', 'r', encoding='UTF8', newline='') as f:
+        with open('../../../csv/header_' + str(file_name) + '.csv', 'r', encoding='UTF8', newline='') as f:
             reader = csv.reader(f)
             data_csv = list(reader)
             data_csv[0] = header + distance_header
 
-        with open('../../../csv/' + str(file_name) + '.csv', 'w', encoding='UTF8', newline='') as f:
+        with open('../../../csv/header_' + str(file_name) + '.csv', 'w', encoding='UTF8', newline='') as f:
             writer = csv.writer(f)
             writer.writerows(data_csv)
     except:
@@ -748,8 +750,9 @@ class SegmentationPredictor(DetectionPredictor):
         processed_img_data_heatmap = b64_src + processed_img_data_heatmap
 
         # Send the processed image back to the client
-        emit("my image", {'data': processed_img_data,
+        socketio.emit("my image", {'data': processed_img_data,
              'list': s2, 'log': s1, 'draw': processed_img_data_draw, 'totalImg': processed_img_data_total, 'heatmap': processed_img_data_heatmap})
+        eventlet.sleep(0.000001)
 
 
 class DetectionPredictor(BasePredictor):
@@ -874,13 +877,14 @@ class DetectionPredictor(BasePredictor):
         processed_img_data_heatmap = b64_src + processed_img_data_heatmap
 
         # Send the processed image back to the client
-        emit("my image", {'data': processed_img_data,
+        socketio.emit("my image", {'data': processed_img_data,
              'list': s2, 'log': s1, 'draw': processed_img_data_draw, 'totalImg': processed_img_data_total, 'heatmap': processed_img_data_heatmap})
+        eventlet.sleep(0.000001)
 
 
 # @hydra.main(version_base=None, config_path=str(DEFAULT_CONFIG.parent), config_name=DEFAULT_CONFIG.name)
-def predict(cfg):
-    global cfg_trapeziums, cfg_lanes, cfg_pixel_to_meter_ratio, cfg_border, cfg_gates, cfg_center, cfg_start_time
+def predict(cfg, sio):
+    global cfg_trapeziums, cfg_lanes, cfg_pixel_to_meter_ratio, cfg_border, cfg_gates, cfg_center, cfg_start_time, socketio
     cfg_pixel_to_meter_ratio = cfg['pixel_to_meter_ratio']
     cfg_border = cfg['border']
     cfg_center = cfg['center']
@@ -888,6 +892,7 @@ def predict(cfg):
     cfg_trapeziums = cfg['box']
     cfg_lanes = cfg['lane']
     cfg_start_time = cfg["start_time"]
+    socketio = sio
 
     init_tracker()
 

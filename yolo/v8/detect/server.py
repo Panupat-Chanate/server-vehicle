@@ -12,7 +12,7 @@ from detect import predict
 # server app
 app = Flask(__name__)
 app.secret_key = 'secret'
-socketio = SocketIO(app, async_mode=None, cors_allowed_origins="*")
+socketio = SocketIO(app, async_mode='eventlet', cors_allowed_origins="*")
 app.debug = True
 
 
@@ -36,7 +36,7 @@ def receive_image(message):
     from threading import Thread
 
     # Create a separate thread to run the emit_in_loop function
-    loop_thread = Thread(target=predict(message['data']))
+    loop_thread = Thread(target=predict(message['data'], socketio))
     loop_thread.daemon = True
     loop_thread.start()
 
@@ -58,7 +58,7 @@ def receive_image(message):
     b64_src = "data:image/jpg;base64,"
     processed_img_data = b64_src + processed_img_data
 
-    emit('first image', {'data': processed_img_data,
+    socketio.emit('first image', {'data': processed_img_data,
          'height': height, 'width': width})
 
 
