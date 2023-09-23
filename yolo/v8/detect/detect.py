@@ -297,8 +297,10 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
         else:
             # if center_detials['id'] in identities:
             center_position.append(center_detials)
+        
+        if id not in distance_header:
             distance_header.append(id)
-            update_csv_header()
+            update_csv_header(id)
 
         # add center to buffer
         data_deque[id].appendleft(center)
@@ -547,9 +549,8 @@ def point_find_lane(point):
     return None
 
 
-def update_csv_header():
+def update_csv_header(c_id):
     try:
-        # print(header + distance_header)
         with open('../../../csv/header_' + str(file_name) + '.csv', 'r', encoding='UTF8', newline='') as f:
             reader = csv.reader(f)
             data_csv = list(reader)
