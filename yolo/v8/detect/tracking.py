@@ -148,7 +148,7 @@ def draw_boxes(img, bbox, names,object_id, identities=None, offset=(0, 0)):
         if id not in data_deque:  
           data_deque[id] = deque(maxlen= 64)
         color = compute_color_for_labels(object_id[i])
-        obj_name = names[object_id[i]]
+        obj_name = None
         label = '{}{:d}'.format("", id) + ":"+ '%s' % (obj_name)
 
         # add center to buffer
@@ -215,7 +215,7 @@ class DetectionPredictor(BasePredictor):
             return log_string
         for c in det[:, 5].unique():
             n = (det[:, 5] == c).sum()  # detections per class
-            log_string += f"{n} {self.model.names[int(c)]}{'s' * (n > 1)}, "
+            # log_string += f"{n} {self.model.names[int(c)]}{'s' * (n > 1)}, "
         # write
         gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
         xywh_bboxs = []

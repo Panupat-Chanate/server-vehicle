@@ -28,7 +28,7 @@ from deep_sort_pytorch.deep_sort import DeepSort
 from collections import deque
 
 # from flask_socketio import emit
-from PIL import Image, ImageDraw, ImageTk
+from PIL import Image, ImageDraw, ImageTk, ImageFont
 from vehicle_distances import process_distances
 
 socketio = None
@@ -42,7 +42,7 @@ cfg_trapeziums = []
 cfg_lanes = []
 speed_line_queue = {}
 cfg_ppm = 8
-cfg_pixel_to_meter_ratio = 3 / 80
+cfg_pixel_to_meter_ratio = 3 / 80 # 80 พิกเซล เท่ากับ 3 เมตร
 cfg_border = True
 data_deque_unlimit = {}
 motorcycle_id = []
@@ -55,15 +55,14 @@ global_img_array = None
 # csv
 number_row = 0
 file_name = 0
-max_row = 25000000 - 1
+max_row = 1000000
 cfg_start_time = None
 calc_timestamps = 0.0
 cur_timestamp = None
 
 center_position = []
-distance_header = []
-header = ['number', 'id', 'name', 'speed', 'positionX',
-          'positionY', 'timestamp', 'datetime', 'gate', 'lane']
+distance_header = ['id-min1', 'distance-min1', 'id-min2', 'distance-min2', 'id-min3', 'distance-min3', 'id-min4', 'distance-min4', 'id-min5', 'distance-min5',]
+header = ['number', 'id', 'name', 'speed', 'positionX', 'positionY', 'pos_laneX', 'pos_laneY', 'timestamp', 'datetime', 'gate', 'lane']
 
 
 def xyxy_to_xywh(*xyxy):
@@ -158,6 +157,20 @@ def UI_box(x, img, color=None, label=None, line_thickness=None):
 
         cv2.putText(img, label, (c1[0], c1[1] - 2), 0, tl / 3,
                     [225, 255, 255], thickness=tf, lineType=cv2.LINE_AA)
+
+
+def UI_box_PIL(draw, box, color=(255, 0, 0), label=None):
+    c1, c2 = (int(box[0]), int(box[1])), (int(box[2]), int(box[3]))
+
+    # Draw rectangle
+    # draw.rectangle([c1, c2], outline=color, width=3)
+
+    # Draw label
+    if label:
+        font = ImageFont.truetype("arial.ttf", 15)
+        text_size = draw.textbbox((c1[0], c1[1]), label, font=font)  # Get text size
+        draw.rectangle([c1, (text_size[2], text_size[3])], fill=color)  # Background for text
+        draw.text((c1[0], c1[1]), label, fill=(255, 255, 255), font=font)  # Label text
 
 
 def intersect(A, B, C, D):
@@ -298,9 +311,9 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
             # if center_detials['id'] in identities:
             center_position.append(center_detials)
         
-        if id not in distance_header:
-            distance_header.append(id)
-            update_csv_header(id)
+        # if id not in distance_header:
+        #     distance_header.append(id)
+        #     update_csv_header(id)
 
         # add center to buffer
         data_deque[id].appendleft(center)
@@ -308,6 +321,7 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
         cur_gate = None
         object_speed = 0
         number_row += 1
+        time_constant = 0.0417
 
         if (cur_timestamp == None):
             cur_timestamp = cfg_start_time
@@ -316,20 +330,22 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
             cap_timestamp = vid_cap.get(cv2.CAP_PROP_POS_MSEC)
             fps = vid_cap.get(cv2.CAP_PROP_FPS)
             calc_timestamp = calc_timestamps + 1000 / fps
-            cur_timestamp = int(
-                cfg_start_time + abs(cap_timestamp - calc_timestamp))
+            now = int(cfg_start_time + abs(cap_timestamp - calc_timestamp))
+            cur_timestamp = now
+            time_seconds = (now - cur_timestamp) 
+
+            if (time_seconds > 0):
+                time_constant = time_seconds
         except:
             pass
 
         dt_object = datetime.datetime.fromtimestamp(cur_timestamp / 1000.0)
         formatted_date_time = dt_object.strftime("%Y-%m-%d %H:%M:%S:%f")[:-3]
-        seconds = round(dt_object.time().second +
-                        dt_object.time().microsecond / 1000000, 3)
 
         if len(data_deque[id]) >= 2:
             # direction = get_direction(data_deque[id][0], data_deque[id][1])
             object_speed = estimatespeed(
-                data_deque[id][1], data_deque[id][0], seconds)
+                data_deque[id][1], data_deque[id][0], time_constant)
             # speed_line_queue[id].append(object_speed)
 
             for i, gate in enumerate(cfg_gates):
@@ -342,6 +358,20 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
                     cur_gate = i
 
         cur_lane = point_find_lane(center)
+        pixels_of_lane_x = None
+        pixels_of_lane_y = None
+
+        try:
+            pixels_of_lane_x, pixels_of_lane_y = normalize_point_in_lane(center)
+            print("lane", pixels_of_box_x, pixels_of_box_y)
+        except:
+            pass
+
+        try:
+            pixels_of_box_x, pixels_of_box_y = normalize_point_in_box(center)
+            # print(id, center, pixels_of_box_x, pixels_of_box_y)
+        except:
+            pass
 
         try:
             for item in center_position:
@@ -350,20 +380,30 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
                     
             distance = process_distances(
                 sorted(center_position, key=lambda x: x['id']))
+            
             found_dicts = [item for item in distance if str(item['id']) == str(id)]
+            
             distn = found_dicts[0]['distances_to_other_ids']
-            distn_row = [distn.get(destination_id, None)
-                         for destination_id in distance_header]
+            pixel_m_dict = {key: round(pixels_to_meters(value, cfg_pixel_to_meter_ratio), 2) for key, value in distn.items()}
+            
+            pixel_m_arr = []
+            for key, value in pixel_m_dict.items():
+                pixel_m_arr.extend([key, value])
+            
+            # distn_row = [distn.get(destination_id, None)
+            #              for destination_id in distance_header]
 
-            pixel_m = [str(round(pixels_to_meters(d, cfg_pixel_to_meter_ratio))) +
-                       " m." if d is not None else None for d in distn_row]
+
+            # pixel_m = [str(round(pixels_to_meters(d, cfg_pixel_to_meter_ratio))) +
+            #            " m." if d is not None else None for d in distn_row]
 
             label = label + " speed:" + str(object_speed) + "km/h"
             label_speed = object_speed
 
             # gen body csv
             data_csv = [number_row, id, obj_name, label_speed,
-                        center[0], center[1], cur_timestamp, formatted_date_time, cur_gate, cur_lane] + pixel_m
+                        center[0], center[1], pixels_of_lane_x, pixels_of_lane_y, cur_timestamp, formatted_date_time, cur_gate, cur_lane] + pixel_m_arr
+            # print(data_csv)
             with open('../../../csv/' + str(file_name) + '.csv', mode='a', encoding='UTF8') as f:
                 writer = csv.writer(f)
                 writer.writerow(data_csv)
@@ -372,7 +412,7 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
         except:
             # gen body csv
             data_csv = [number_row, id, obj_name, None,
-                        center[0], center[1], cur_timestamp, formatted_date_time, cur_gate, cur_lane]
+                        center[0], center[1], pixels_of_lane_x, pixels_of_lane_y, cur_timestamp, formatted_date_time, cur_gate, cur_lane]
             with open('../../../csv/' + str(file_name) + '.csv', mode='a', encoding='UTF8') as f:
                 writer = csv.writer(f)
                 writer.writerow(data_csv)
@@ -399,6 +439,11 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
                       int((x2+x1) / 2 + 10),
                       int((y2+y2)/2 + 10)],
                      fill=color, outline=None)
+        
+        UI_box_PIL(draw, [int((x2+x1) / 2 - 10),
+                      int((y2+y2)/2 - 30),
+                      int((x2+x1) / 2 + 10),
+                      int((y2+y2)/2 + 10)], color=color, label=label)
 
     # draw trail unlimit
     for id in data_deque_unlimit:
@@ -455,7 +500,7 @@ def gen_csv_header():
     file_name += 1
     header_csv = header + distance_header
 
-    with open('../../../csv/header_' + str(file_name) + '.csv', 'w', encoding='UTF8', newline='') as f:
+    with open('../../../csv/' + str(file_name) + '.csv', 'w', encoding='UTF8', newline='') as f:
         writer = csv.writer(f)
         writer.writerow(header_csv)
 
@@ -466,16 +511,12 @@ def pixels_to_meters(pixels, pixel_to_meter_ratio):
 
 
 def estimatespeed(Location1, Location2, seconds):
-    # Euclidean Distance Formula
     d_pixel = math.sqrt(math.pow(
         Location2[0] - Location1[0], 2) + math.pow(Location2[1] - Location1[1], 2))
-
     d_meters = pixels_to_meters(d_pixel, cfg_pixel_to_meter_ratio)
-    # d_meters = d_pixel/26.667
-    time_constant = 15 * 3.6
-    # v_mps = d_meters / seconds
-    # speed = v_mps * 3.6
-    speed = d_meters * time_constant
+    speed = d_meters / seconds
+
+    print(d_pixel, d_meters)
 
     return int(speed)
 
@@ -548,19 +589,64 @@ def point_find_lane(point):
 
     return None
 
+def normalize_point_in_lane(point):
+    x, y = point
 
-def update_csv_header(c_id):
-    try:
-        with open('../../../csv/header_' + str(file_name) + '.csv', 'r', encoding='UTF8', newline='') as f:
-            reader = csv.reader(f)
-            data_csv = list(reader)
-            data_csv[0] = header + distance_header
+    all_points = [pt for lane in cfg_lanes for pt in lane]
 
-        with open('../../../csv/header_' + str(file_name) + '.csv', 'w', encoding='UTF8', newline='') as f:
-            writer = csv.writer(f)
-            writer.writerows(data_csv)
-    except:
-        gen_csv_header()
+    x_coords = [int(pt['x']) for pt in all_points]
+    y_coords = [int(pt['y']) for pt in all_points]
+    
+    minX, maxX = min(x_coords), max(x_coords)
+    minY, maxY = min(y_coords), max(y_coords)
+    
+    width = maxX - minX
+    height = maxY - minY
+
+    normalizedX = ((x - minX) / width) * 100
+    normalizedY = ((y - minY) / height) * 100
+
+    return normalizedX, normalizedY
+
+def normalize_point_in_box(point):
+    x, y = point
+
+    all_points = [pt for box in cfg_trapeziums for pt in box]
+
+    x_coords = [int(pt['x']) for pt in all_points]
+    y_coords = [int(pt['y']) for pt in all_points]
+    
+    minX, maxX = min(x_coords), max(x_coords)
+    minY, maxY = min(y_coords), max(y_coords)
+    
+    width = maxX - minX
+    height = maxY - minY
+
+    normalizedX = ((x - minX) / width) * 100
+    normalizedY = ((y - minY) / height) * 100
+
+    pixel_x = (normalizedX / 100) * (max(x_coords) - min(x_coords)) + min(x_coords)
+    pixel_y = (normalizedY / 100) * (max(y_coords) - min(y_coords)) + min(y_coords)
+    meter_x = pixels_to_meters(pixel_x, cfg_pixel_to_meter_ratio)
+    meter_y = pixels_to_meters(pixel_y, cfg_pixel_to_meter_ratio)
+
+    print(meter_x, meter_y)
+
+    return normalizedX, normalizedY
+
+
+# def update_csv_header(c_id):
+#     try:
+#         with open('../../../csv/header_' + str(file_name) + '.csv', 'r', encoding='UTF8', newline='') as f:
+#             reader = csv.reader(f)
+#             data_csv = list(reader)
+#             data_csv[0] = header + distance_header
+
+#         with open('../../../csv/header_' + str(file_name) + '.csv', 'w', encoding='UTF8', newline='') as f:
+#             writer = csv.writer(f)
+#             writer.writerows(data_csv)
+#     except:
+#         gen_csv_header()
 ##########################################################################################
 
 

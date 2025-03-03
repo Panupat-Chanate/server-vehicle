@@ -18,5 +18,9 @@ def process_distances(data):
                         new_key = s1 + "-" + s2
                         distances[new_key] = round(distance_veh(obj1[s1], obj2[s2]), 3)
                 min_distances[obj2['id']] = min(distances.values())
-        obj1['distances_to_other_ids'] = min_distances
+                
+        sorted_data = sorted(min_distances.items(), key=lambda x: x[1])
+        top_5 = sorted_data[:5]
+        obj1['distances_to_other_ids'] = dict(sorted(dict(top_5).items()))
+
     return data

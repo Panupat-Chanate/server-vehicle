@@ -160,3 +160,6 @@ cython_debug/
 #.idea/
 
 /server/yolo/v8/detect/runs/
+yolo/v8/detect/best.pt
+yolo/v8/detect/runs/
+/csv/
