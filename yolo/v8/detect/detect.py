@@ -62,7 +62,7 @@ cur_timestamp = None
 
 center_position = []
 distance_header = ['id-min1', 'distance-min1', 'id-min2', 'distance-min2', 'id-min3', 'distance-min3', 'id-min4', 'distance-min4', 'id-min5', 'distance-min5',]
-header = ['number', 'id', 'name', 'speed', 'positionX', 'positionY', 'pos_laneX', 'pos_laneY', 'timestamp', 'datetime', 'gate', 'lane']
+header = ['number', 'id', 'name', 'speed', 'positionX', 'positionY', 'meter_laneX', 'meter_laneY', 'meter_boundingboxY', 'meter_boundingboxX', 'timestamp', 'datetime', 'gate', 'lane']
 
 
 def xyxy_to_xywh(*xyxy):
@@ -321,7 +321,7 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
         cur_gate = None
         object_speed = 0
         number_row += 1
-        time_constant = 0.0417
+        time_constant = 15 * 3.6
 
         if (cur_timestamp == None):
             cur_timestamp = cfg_start_time
@@ -331,11 +331,11 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
             fps = vid_cap.get(cv2.CAP_PROP_FPS)
             calc_timestamp = calc_timestamps + 1000 / fps
             now = int(cfg_start_time + abs(cap_timestamp - calc_timestamp))
+            time_seconds = (now - cur_timestamp)
             cur_timestamp = now
-            time_seconds = (now - cur_timestamp) 
 
-            if (time_seconds > 0):
-                time_constant = time_seconds
+            # if (time_seconds > 0):
+            #     time_constant = time_seconds
         except:
             pass
 
@@ -358,18 +358,20 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
                     cur_gate = i
 
         cur_lane = point_find_lane(center)
-        pixels_of_lane_x = None
-        pixels_of_lane_y = None
+        meter_of_lane_x = None
+        meter_of_lane_y = None
+        meter_of_box_x = None
+        meter_of_box_y = None
 
         try:
-            pixels_of_lane_x, pixels_of_lane_y = normalize_point_in_lane(center)
-            print("lane", pixels_of_box_x, pixels_of_box_y)
+            meter_of_lane_x, meter_of_lane_y = meter_of_point(cfg_lanes[cur_lane][0], center)
+            # print(id, cur_lane, meter_of_lane_x, meter_of_lane_y)
         except:
             pass
 
         try:
-            pixels_of_box_x, pixels_of_box_y = normalize_point_in_box(center)
-            # print(id, center, pixels_of_box_x, pixels_of_box_y)
+            meter_of_box_x, meter_of_box_y = meter_of_point(cfg_trapeziums[0][0], center)
+            # print(id, center, meter_of_box_x, meter_of_box_y)
         except:
             pass
 
@@ -402,7 +404,7 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
 
             # gen body csv
             data_csv = [number_row, id, obj_name, label_speed,
-                        center[0], center[1], pixels_of_lane_x, pixels_of_lane_y, cur_timestamp, formatted_date_time, cur_gate, cur_lane] + pixel_m_arr
+                        center[0], center[1], meter_of_lane_x, meter_of_lane_y, meter_of_box_x, meter_of_box_y, cur_timestamp, formatted_date_time, cur_gate, cur_lane] + pixel_m_arr
             # print(data_csv)
             with open('../../../csv/' + str(file_name) + '.csv', mode='a', encoding='UTF8') as f:
                 writer = csv.writer(f)
@@ -412,7 +414,7 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
         except:
             # gen body csv
             data_csv = [number_row, id, obj_name, None,
-                        center[0], center[1], pixels_of_lane_x, pixels_of_lane_y, cur_timestamp, formatted_date_time, cur_gate, cur_lane]
+                        center[0], center[1], meter_of_lane_x, meter_of_lane_y, meter_of_box_x, meter_of_box_y, cur_timestamp, formatted_date_time, cur_gate, cur_lane]
             with open('../../../csv/' + str(file_name) + '.csv', mode='a', encoding='UTF8') as f:
                 writer = csv.writer(f)
                 writer.writerow(data_csv)
@@ -439,11 +441,13 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
                       int((x2+x1) / 2 + 10),
                       int((y2+y2)/2 + 10)],
                      fill=color, outline=None)
+
+        label_PIL = label = "ID:" + '{}{:d}'.format("", id) + ":" + '%s' % (obj_name)
         
         UI_box_PIL(draw, [int((x2+x1) / 2 - 10),
                       int((y2+y2)/2 - 30),
                       int((x2+x1) / 2 + 10),
-                      int((y2+y2)/2 + 10)], color=color, label=label)
+                      int((y2+y2)/2 + 10)], color=color, label=label_PIL)
 
     # draw trail unlimit
     for id in data_deque_unlimit:
@@ -514,9 +518,7 @@ def estimatespeed(Location1, Location2, seconds):
     d_pixel = math.sqrt(math.pow(
         Location2[0] - Location1[0], 2) + math.pow(Location2[1] - Location1[1], 2))
     d_meters = pixels_to_meters(d_pixel, cfg_pixel_to_meter_ratio)
-    speed = d_meters / seconds
-
-    print(d_pixel, d_meters)
+    speed = d_meters * seconds
 
     return int(speed)
 
@@ -608,32 +610,13 @@ def normalize_point_in_lane(point):
 
     return normalizedX, normalizedY
 
-def normalize_point_in_box(point):
+def meter_of_point(top_left_pixel, point):
     x, y = point
 
-    all_points = [pt for box in cfg_trapeziums for pt in box]
+    x_m = (x - top_left_pixel['x']) * cfg_pixel_to_meter_ratio
+    y_m = (y - top_left_pixel['y']) * cfg_pixel_to_meter_ratio
 
-    x_coords = [int(pt['x']) for pt in all_points]
-    y_coords = [int(pt['y']) for pt in all_points]
-    
-    minX, maxX = min(x_coords), max(x_coords)
-    minY, maxY = min(y_coords), max(y_coords)
-    
-    width = maxX - minX
-    height = maxY - minY
-
-    normalizedX = ((x - minX) / width) * 100
-    normalizedY = ((y - minY) / height) * 100
-
-    pixel_x = (normalizedX / 100) * (max(x_coords) - min(x_coords)) + min(x_coords)
-    pixel_y = (normalizedY / 100) * (max(y_coords) - min(y_coords)) + min(y_coords)
-    meter_x = pixels_to_meters(pixel_x, cfg_pixel_to_meter_ratio)
-    meter_y = pixels_to_meters(pixel_y, cfg_pixel_to_meter_ratio)
-
-    print(meter_x, meter_y)
-
-    return normalizedX, normalizedY
-
+    return x_m, y_m
 
 # def update_csv_header(c_id):
 #     try:
