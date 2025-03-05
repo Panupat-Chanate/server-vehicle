@@ -20,6 +20,8 @@ def process_distances(data):
                 min_distances[obj2['id']] = min(distances.values())
 
         sorted_data = sorted(min_distances.items(), key=lambda x: x[1])
+        # top_5 = sorted_data[:5]
+        # obj1['distances_to_other_ids'] = dict(sorted(dict(top_5).items()))
         obj1['distances_to_other_ids'] = dict(sorted_data)
 
     return data
