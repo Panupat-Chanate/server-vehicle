@@ -61,7 +61,8 @@ calc_timestamps = 0.0
 cur_timestamp = None
 
 center_position = []
-distance_header = ['id-min1', 'distance-min1', 'id-min2', 'distance-min2', 'id-min3', 'distance-min3', 'id-min4', 'distance-min4', 'id-min5', 'distance-min5',]
+# distance_header = ['id-min1', 'distance-min1', 'id-min2', 'distance-min2', 'id-min3', 'distance-min3', 'id-min4', 'distance-min4', 'id-min5', 'distance-min5',]
+distance_header = []
 header = ['number', 'id', 'name', 'speed', 'positionX', 'positionY', 'pos_laneX', 'pos_laneY', 'timestamp', 'datetime', 'gate', 'lane']
 
 
@@ -363,7 +364,7 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
 
         try:
             pixels_of_lane_x, pixels_of_lane_y = normalize_point_in_lane(center)
-            print("lane", pixels_of_box_x, pixels_of_box_y)
+            # print("lane", pixels_of_box_x, pixels_of_box_y)
         except:
             pass
 
@@ -399,6 +400,13 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
 
             label = label + " speed:" + str(object_speed) + "km/h"
             label_speed = object_speed
+            # print("")
+            # print(center_position)
+            # print("--------------------------------------------")
+            # print(found_dicts)
+            # print("")
+            
+            update_csv_header(distn)
 
             # gen body csv
             data_csv = [number_row, id, obj_name, label_speed,
@@ -516,7 +524,7 @@ def estimatespeed(Location1, Location2, seconds):
     d_meters = pixels_to_meters(d_pixel, cfg_pixel_to_meter_ratio)
     speed = d_meters / seconds
 
-    print(d_pixel, d_meters)
+    # print(d_pixel, d_meters)
 
     return int(speed)
 
@@ -630,23 +638,32 @@ def normalize_point_in_box(point):
     meter_x = pixels_to_meters(pixel_x, cfg_pixel_to_meter_ratio)
     meter_y = pixels_to_meters(pixel_y, cfg_pixel_to_meter_ratio)
 
-    print(meter_x, meter_y)
+    # print(meter_x, meter_y)
 
     return normalizedX, normalizedY
 
+def update_csv_header(veh_list):
+    global distance_header
+    try:
+        id_min_count = len([item for item in distance_header if item.startswith('id-min')])
+        if len(veh_list) + 1 > id_min_count:
+            distance_header = []
+            for i in range(1, len(veh_list) + 1):
+                distance_header.append(f'id-min{i}')
+                distance_header.append(f'distance-min{i}')
 
-# def update_csv_header(c_id):
-#     try:
-#         with open('../../../csv/header_' + str(file_name) + '.csv', 'r', encoding='UTF8', newline='') as f:
-#             reader = csv.reader(f)
-#             data_csv = list(reader)
-#             data_csv[0] = header + distance_header
+            with open('../../../csv/header_' + str(file_name) + '.csv', 'r', encoding='UTF8', newline='') as f:
+                reader = csv.reader(f)
+                data_csv = list(reader)
+                data_csv[0] = header + distance_header
 
-#         with open('../../../csv/header_' + str(file_name) + '.csv', 'w', encoding='UTF8', newline='') as f:
-#             writer = csv.writer(f)
-#             writer.writerows(data_csv)
-#     except:
-#         gen_csv_header()
+            with open('../../../csv/header_' + str(file_name) + '.csv', 'w', encoding='UTF8', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerows(data_csv)
+    except:
+        with open('../../../csv/header_' + str(file_name) + '.csv', 'w', encoding='UTF8', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(header)
 ##########################################################################################
 
 
