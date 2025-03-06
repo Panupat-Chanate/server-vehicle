@@ -386,11 +386,12 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
             found_dicts = [item for item in distance if str(item['id']) == str(id)]
             
             distn = found_dicts[0]['distances_to_other_ids']
+            distn_details = found_dicts[0]['distance_details']
             pixel_m_dict = {key: round(pixels_to_meters(value, cfg_pixel_to_meter_ratio), 2) for key, value in distn.items()}
-            
+
             pixel_m_arr = []
             for key, value in pixel_m_dict.items():
-                pixel_m_arr.extend([key, value])
+                pixel_m_arr.extend([key, value, distn_details[key]["key"], distn_details[key]["start_point"], distn_details[key]["end_point"]])
             
             # distn_row = [distn.get(destination_id, None)
             #              for destination_id in distance_header]
@@ -634,6 +635,9 @@ def update_csv_header(veh_list):
             for i in range(1, len(veh_list) + 1):
                 distance_header.append(f'id-min{i}')
                 distance_header.append(f'distance-min{i}')
+                distance_header.append(f'link-min{i}')
+                distance_header.append(f'startX-coordinate-min{i}')
+                distance_header.append(f'endY-coordinate-min{i}')
 
             with open('../../../csv/header_' + str(file_name) + '.csv', 'r', encoding='UTF8', newline='') as f:
                 reader = csv.reader(f)
