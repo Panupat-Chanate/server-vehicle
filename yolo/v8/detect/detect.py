@@ -61,7 +61,7 @@ calc_timestamps = 0.0
 cur_timestamp = None
 
 center_position = []
-distance_header = ['id-min1', 'distance-min1', 'id-min2', 'distance-min2', 'id-min3', 'distance-min3', 'id-min4', 'distance-min4', 'id-min5', 'distance-min5',]
+distance_header = []
 header = ['number', 'id', 'name', 'speed', 'positionX', 'positionY', 'meter_laneX', 'meter_laneY', 'meter_boundingboxY', 'meter_boundingboxX', 'timestamp', 'datetime', 'gate', 'lane']
 
 
@@ -380,11 +380,11 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
                 if item['id'] not in identities:
                     center_position.remove(item)
                     
-            # distance = process_distances(
-            #     sorted(center_position, key=lambda x: x['id']))
-            
-            distance = process_distances_key(
+            distance = process_distances(
                 sorted(center_position, key=lambda x: x['id']))
+            
+            # distance = process_distances_key(
+            #     sorted(center_position, key=lambda x: x['id']))
             
             # found_dicts = [item for item in distance if str(item['id']) == str(id)]
             found_dicts = [item for item in distance if str(item['id']) == str(id)]
@@ -641,6 +641,8 @@ def update_csv_header(veh_list):
                 distance_header.append(f'distance-min{i}')
                 distance_header.append(f'link-min{i}')
                 distance_header.append(f'startX-coordinate-min{i}')
+                distance_header.append(f'startY-coordinate-min{i}')
+                distance_header.append(f'endX-coordinate-min{i}')
                 distance_header.append(f'endY-coordinate-min{i}')
 
             with open('../../../csv/header_' + str(file_name) + '.csv', 'r', encoding='UTF8', newline='') as f:

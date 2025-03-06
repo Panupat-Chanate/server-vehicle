@@ -18,7 +18,7 @@ def process_distances(data):
                 coord_pairs = {}
                 for s1 in side:
                     for s2 in side:
-                        new_key = s1 + "-" + s2
+                        new_key = s1 + "," + s2
                         distances[new_key] = round(distance_veh(obj1[s1], obj2[s2]), 3)
                         coord_pairs[new_key] = (obj1[s1], obj2[s2])
                 
