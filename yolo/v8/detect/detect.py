@@ -391,7 +391,7 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
 
             pixel_m_arr = []
             for key, value in pixel_m_dict.items():
-                pixel_m_arr.extend([key, value, distn_details[key]["key"], distn_details[key]["start_point"], distn_details[key]["end_point"]])
+                pixel_m_arr.extend([key, value, distn_details[key]["key"], distn_details[key]["start_point"][0], distn_details[key]["start_point"][1], distn_details[key]["end_point"][0], distn_details[key]["end_point"][1]])
             
             # distn_row = [distn.get(destination_id, None)
             #              for destination_id in distance_header]
