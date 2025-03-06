@@ -29,7 +29,7 @@ from collections import deque
 
 # from flask_socketio import emit
 from PIL import Image, ImageDraw, ImageTk, ImageFont
-from vehicle_distances import process_distances
+from vehicle_distances import process_distances, process_distances_key
 
 socketio = None
 palette = (2 ** 11 - 1, 2 ** 15 - 1, 2 ** 20 - 1)
@@ -380,18 +380,26 @@ def draw_boxes(img, bbox, names, object_id, vid_cap, identities=None, offset=(0,
                 if item['id'] not in identities:
                     center_position.remove(item)
                     
-            distance = process_distances(
+            # distance = process_distances(
+            #     sorted(center_position, key=lambda x: x['id']))
+            
+            distance = process_distances_key(
                 sorted(center_position, key=lambda x: x['id']))
             
+            # found_dicts = [item for item in distance if str(item['id']) == str(id)]
             found_dicts = [item for item in distance if str(item['id']) == str(id)]
             
             distn = found_dicts[0]['distances_to_other_ids']
-            pixel_m_dict = {key: round(pixels_to_meters(value, cfg_pixel_to_meter_ratio), 2) for key, value in distn.items()}
+            # pixel_m_dict = {key: round(pixels_to_meters(value, cfg_pixel_to_meter_ratio), 2) for key, value in distn.items()}
+            pixel_m_dict = {key: {
+                    'value': round(pixels_to_meters(value['value'], cfg_pixel_to_meter_ratio), 2),
+                    'position': value['position']
+                } for key, value in distn.items()}
             
             pixel_m_arr = []
             for key, value in pixel_m_dict.items():
-                pixel_m_arr.extend([key, value])
-            
+                pixel_m_arr.extend([key, value['value'], value['position']])
+            print(pixel_m_arr)
             # distn_row = [distn.get(destination_id, None)
             #              for destination_id in distance_header]
 
@@ -634,6 +642,7 @@ def update_csv_header(veh_list):
             for i in range(1, len(veh_list) + 1):
                 distance_header.append(f'id-min{i}')
                 distance_header.append(f'distance-min{i}')
+                distance_header.append(f'pointer-min{i}')
 
             with open('../../../csv/header_' + str(file_name) + '.csv', 'r', encoding='UTF8', newline='') as f:
                 reader = csv.reader(f)

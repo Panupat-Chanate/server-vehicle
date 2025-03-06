@@ -25,3 +25,25 @@ def process_distances(data):
         obj1['distances_to_other_ids'] = dict(sorted_data)
 
     return data
+
+def process_distances_key(data):
+    for i, obj1 in enumerate(data):
+        min_distances = {}
+        for j, obj2 in enumerate(data):
+            if i != j:
+                distances = {}
+                for s1 in side:
+                    for s2 in side:
+                        new_key = s1 + "," + s2
+                        distances[new_key] = round(distance_veh(obj1[s1], obj2[s2]), 3)
+                min_distances[obj2['id']] = min(distances.values())
+                min_distance_key = min(distances, key=distances.get)
+                min_distances[obj2['id']] = {
+                    'value': min(distances.values()),  
+                    'position': min_distance_key
+                }
+
+        sorted_data = sorted(min_distances.items(), key=lambda x: x[1]['value'])
+        obj1['distances_to_other_ids'] = dict(sorted_data)
+
+    return data
